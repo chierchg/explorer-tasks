@@ -49,7 +49,6 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
-      "problemMatcher": []
     },
     {
       "label": "-- Tests -- / Quick success",
@@ -59,7 +58,6 @@
         "-e",
         "console.log('Explorer Tasks: quick task completed successfully')"
       ],
-      "problemMatcher": []
     },
     {
       "label": "-- Tests -- / Expected failure",
@@ -69,7 +67,6 @@
         "-e",
         "console.error('Explorer Tasks: intentional test failure'); process.exit(1)"
       ],
-      "problemMatcher": []
     },
     {
       "label": "-- Tests -- / Concurrent long-running",
@@ -82,7 +79,6 @@
       "runOptions": {
         "instanceLimit": 3
       },
-      "problemMatcher": []
     },
     {
       "label": "-- Tests -- / Nested / Labels: path/to/file",
@@ -92,7 +88,6 @@
         "-e",
         "console.log('Explorer Tasks: nested grouping and literal label characters work')"
       ],
-      "problemMatcher": []
     }
   ],
   "inputs": [

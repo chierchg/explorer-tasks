@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - Add task icons with optional theme colors and a neutral default icon.
 
