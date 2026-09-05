@@ -16,9 +16,7 @@ Run tasks directly from the Explorer tab.
 - Click the Hide action to exclude a task from the view.
 - Click the Unhide action to reveal a hidden task.
 
-> ### *Note*
-> 
-> Hide action adds `"hidden": true` to the task in `tasks.json`. Unhide action removes it. You can also manually add or remove this property to hide or unhide a task.
+*Note:* Hide action adds `"hidden": true` to the task definition in `tasks.json`. Unhide action removes it. In addition to the UI actions, you can manually add or remove this property to hide or unhide a task.
 
 ## Toolbar actions
 
@@ -27,9 +25,7 @@ Run tasks directly from the Explorer tab.
 - Expand or Collapse groups by default (only in Tree View).
 - Show hidden tasks (only when hidden tasks exist).
 
-> ### *Note*
->
-> *Flat/Tree* and *Expand/Collapse* settings are saved per workspace in `.vscode/settings.json`.
+*Note:* Flat/Tree and Expand/Collapse settings are saved per workspace in `.vscode/settings.json`.
 
 ## Organize tasks into groups
 
