@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Add icon for the extension.
+
 ## 0.1.0
 
 - Show explicitly configured project tasks in the native Explorer tree.

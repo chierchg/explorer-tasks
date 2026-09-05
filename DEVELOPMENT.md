@@ -23,4 +23,16 @@ Press F5 in VS Code to launch an Extension Development Host. Automated tests moc
 
 ## Marketplace release
 
-The README is written for Marketplace users. The package has not been published. Before publication, replace the `local` publisher identity with the owner's registered publisher, supply repository metadata, and confirm licensing (currently `UNLICENSED`). Set the release version in both package manifests and update CHANGELOG.md before building the final VSIX.
+The README is written for Marketplace users. Create a publisher under your Microsoft account at the Marketplace publisher management page, then put its ID in the `publisher` field of `package.json`. The project currently has no public repository and retains `UNLICENSED`; packaging explicitly allows a missing repository and license file. No open-source license is assigned.
+
+```sh
+npm run package:marketplace
+```
+
+This checks that the placeholder publisher has been replaced, runs syntax checks and tests, and builds `dist/explorer-tasks-marketplace.vsix` with vsce validation. The command does not publish anything. The local package command remains available for development installs.
+
+If you later add a repository or license, update the manifest, include the license file in `.vscodeignore`, and remove the corresponding packaging exception.
+
+Upload the final VSIX through the [Marketplace publisher management page](https://marketplace.visualstudio.com/manage). Choose the registered publisher, then **New extension → Visual Studio Code**, and select the package. See Microsoft's [publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension) for account setup and publication details.
+
+Before publication, verify the VSIX in a live VS Code window, including task Run/Stop, groups, ordering, and selection clearing. Keep authentication credentials out of the repository. Update the version and changelog for subsequent releases.

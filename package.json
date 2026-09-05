@@ -2,29 +2,37 @@
   "name": "explorer-tasks",
   "displayName": "Explorer Tasks",
   "description": "Run VS Code tasks directly from the Explorer.",
-  "version": "0.1.0",
-  "publisher": "local",
+  "version": "0.1.1",
+  "publisher": "yokopoco",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
   ],
+  "keywords": [
+    "tasks",
+    "task runner",
+    "explorer",
+    "tasks.json"
+  ],
   "main": "./extension.js",
-  "private": true,
-  "license": "UNLICENSED",
+  "private": false,
+  "license": "MIT",
   "scripts": {
     "check": "node --check extension.js",
     "test": "node --test",
     "vscode:prepublish": "npm run check && npm test",
-    "package": "node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\" && vsce package --no-dependencies --allow-missing-repository --skip-license --out dist/explorer-tasks.vsix"
+    "package": "node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\" && vsce package --no-dependencies --allow-missing-repository --out dist/explorer-tasks.vsix"
   },
   "contributes": {
     "views": {
       "explorer": [
         {
           "id": "explorerTasks.tasksView",
-          "name": "Tasks"
+          "name": "Tasks",
+          "icon": "icon.png"
         }
       ]
     },

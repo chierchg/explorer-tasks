@@ -2,30 +2,13 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Project / Package extension",
+      "label": "Project / Step 1: Package",
       "type": "shell",
       "command": "npm run package",
       "options": {
         "cwd": "${workspaceFolder}"
       },
       "group": "build",
-      "problemMatcher": []
-    },
-    {
-      "label": "Project / Update local extension",
-      "detail": "Build and force-install the local VSIX, then run Developer: Reload Window. On macOS, uses VS Code's bundled launcher in /Applications.",
-      "type": "shell",
-      "command": "npm run package && code --install-extension ./dist/explorer-tasks.vsix --force",
-      "osx": {
-        "command": "npm run package && \"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code\" --install-extension ./dist/explorer-tasks.vsix --force"
-      },
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
-      },
       "problemMatcher": []
     },
     {
