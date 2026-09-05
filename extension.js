@@ -1,7 +1,10 @@
 const vscode = require("vscode");
+const { applyEdits, modify, parse } = require("jsonc-parser");
 
 class TasksProvider {
-  constructor() {
+  constructor(workspaceState) {
+    this.workspaceState = workspaceState;
+    this.showHidden = workspaceState.get("showHiddenTasks", false);
     this._onDidChangeTreeData = new vscode.EventEmitter();
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
 
@@ -36,9 +39,26 @@ class TasksProvider {
         .filter(entry => entry.index >= 0)
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
 
-      const hasTaskGroups = ordered.some(({ task }) => hasGroupPath(task.name));
+      const hasHiddenTasks = ordered.some(({ definition }) => definition?.hide === true);
+      const displayed = this.showHidden
+        ? ordered
+        : ordered.filter(({ task, definition }) =>
+            definition?.hide !== true || this.getExecutions(task).size > 0
+          );
+
+      const hasTaskGroups = displayed.some(({ task }) => hasGroupPath(task.name));
       const mode = viewMode();
       const groupsExpanded = groupsExpandedByDefault();
+      await vscode.commands.executeCommand(
+        "setContext",
+        "explorerTasks.hasHiddenTasks",
+        hasHiddenTasks
+      );
+      await vscode.commands.executeCommand(
+        "setContext",
+        "explorerTasks.showHiddenTasks",
+        this.showHidden
+      );
       await vscode.commands.executeCommand(
         "setContext",
         "explorerTasks.hasTaskGroups",
@@ -55,19 +75,15 @@ class TasksProvider {
         groupsExpanded
       );
 
-      const items = ordered.map(({ task, definition }) => {
+      const items = displayed.map(({ task, definition }) => {
         const key = taskKey(task);
-        const executions = new Set(this.runningTasks.get(key) || []);
-        for (const execution of vscode.tasks.taskExecutions) {
-          if (taskKey(execution.task) === key) {
-            executions.add(execution);
-          }
-        }
+        const executions = this.getExecutions(task);
         return new TaskItem(
           task,
           key,
           executions.size > 0,
-          configuredTaskIcon(definition)
+          configuredTaskIcon(definition),
+          definition?.hide === true
         );
       });
 
@@ -125,10 +141,27 @@ class TasksProvider {
       )
     );
   }
+
+  getExecutions(task) {
+    const key = taskKey(task);
+    const executions = new Set(this.runningTasks.get(key) || []);
+
+    for (const execution of vscode.tasks.taskExecutions) {
+      if (taskKey(execution.task) === key) executions.add(execution);
+    }
+
+    return executions;
+  }
+
+  async setShowHidden(value) {
+    this.showHidden = value;
+    await this.workspaceState.update("showHiddenTasks", value);
+    this.refresh();
+  }
 }
 
 class TaskItem extends vscode.TreeItem {
-  constructor(task, key, running, icon) {
+  constructor(task, key, running, icon, hidden) {
     super(
       task.name,
       vscode.TreeItemCollapsibleState.None
@@ -138,19 +171,30 @@ class TaskItem extends vscode.TreeItem {
     this.key = key;
     this.running = running;
 
-    this.contextValue = running
-      ? "explorerTaskRunning"
-      : "explorerTask";
+    this.hidden = hidden;
+    const hiddenColor = hidden
+      ? new vscode.ThemeColor("list.deemphasizedForeground")
+      : undefined;
+    this.contextValue = hidden
+      ? (running ? "explorerTaskHiddenRunning" : "explorerTaskHidden")
+      : (running ? "explorerTaskRunning" : "explorerTask");
+
+    if (hidden) this.description = "Hidden";
+    if (hidden) {
+      this.resourceUri = vscode.Uri.parse(
+        `explorer-task-hidden:/${encodeURIComponent(key)}`
+      );
+    }
 
     if (running) {
       this.iconPath = new vscode.ThemeIcon("sync~spin");
     } else if (icon) {
       this.iconPath = new vscode.ThemeIcon(
         icon.id,
-        icon.color ? new vscode.ThemeColor(icon.color) : undefined
+        hiddenColor || (icon.color ? new vscode.ThemeColor(icon.color) : undefined)
       );
     } else {
-      this.iconPath = new vscode.ThemeIcon("gear");
+      this.iconPath = new vscode.ThemeIcon("gear", hiddenColor);
     }
 
     if (!running) {
@@ -188,7 +232,18 @@ class TaskItem extends vscode.TreeItem {
 }
 
 function activate(context) {
-  const provider = new TasksProvider();
+  const provider = new TasksProvider(context.workspaceState);
+
+  const hiddenTaskDecorationProvider =
+    vscode.window.registerFileDecorationProvider({
+      provideFileDecoration(uri) {
+        if (uri.scheme !== "explorer-task-hidden") return undefined;
+
+        return {
+          color: new vscode.ThemeColor("list.deemphasizedForeground")
+        };
+      }
+    });
 
   const treeView = vscode.window.createTreeView(
     "explorerTasks.tasksView",
@@ -255,6 +310,26 @@ function activate(context) {
   const modifyTaskCommand = vscode.commands.registerCommand(
     "explorerTasks.modifyTask",
     item => openTaskDefinition(item?.task)
+  );
+
+  const hideTaskCommand = vscode.commands.registerCommand(
+    "explorerTasks.hideTask",
+    item => setTaskHidden(item?.task, true)
+  );
+
+  const unhideTaskCommand = vscode.commands.registerCommand(
+    "explorerTasks.unhideTask",
+    item => setTaskHidden(item?.task, false)
+  );
+
+  const showHiddenTasksCommand = vscode.commands.registerCommand(
+    "explorerTasks.showHiddenTasks",
+    () => provider.setShowHidden(true)
+  );
+
+  const hideHiddenTasksCommand = vscode.commands.registerCommand(
+    "explorerTasks.hideHiddenTasks",
+    () => provider.setShowHidden(false)
   );
 
   const toggleGroupExpansionCommand = vscode.commands.registerCommand(
@@ -364,11 +439,16 @@ function activate(context) {
 
   context.subscriptions.push(
     provider,
+    hiddenTaskDecorationProvider,
     treeView,
     runCommand,
     stopCommand,
     refreshCommand,
     modifyTaskCommand,
+    hideTaskCommand,
+    unhideTaskCommand,
+    showHiddenTasksCommand,
+    hideHiddenTasksCommand,
     toggleGroupExpansionCommand,
     toggleViewModeCommand,
     expandGroupsCommand,
@@ -388,18 +468,7 @@ function deactivate() {}
 async function openTaskDefinition(task) {
   if (!task) return;
 
-  const folder = typeof task.scope === "object" ? task.scope : undefined;
-  const uri = folder
-    ? vscode.Uri.joinPath(folder.uri, ".vscode", "tasks.json")
-    : vscode.workspace.workspaceFile || (
-        vscode.workspace.workspaceFolders?.[0]
-          ? vscode.Uri.joinPath(
-              vscode.workspace.workspaceFolders[0].uri,
-              ".vscode",
-              "tasks.json"
-            )
-          : undefined
-      );
+  const uri = taskConfigurationUri(task);
 
   if (!uri) return;
 
@@ -420,6 +489,59 @@ async function openTaskDefinition(task) {
   } catch (error) {
     vscode.window.showErrorMessage(
       `Could not open the task configuration: ${error.message || error}`
+    );
+  }
+}
+
+function taskConfigurationUri(task) {
+  const folder = typeof task.scope === "object" ? task.scope : undefined;
+  return folder
+    ? vscode.Uri.joinPath(folder.uri, ".vscode", "tasks.json")
+    : vscode.workspace.workspaceFile || (
+        vscode.workspace.workspaceFolders?.[0]
+          ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, ".vscode", "tasks.json")
+          : undefined
+      );
+}
+
+async function setTaskHidden(task, hidden) {
+  if (!task) return;
+  const uri = taskConfigurationUri(task);
+  if (!uri) return;
+
+  try {
+    const document = await vscode.workspace.openTextDocument(uri);
+    const text = document.getText();
+    const root = parse(text);
+    const candidates = [
+      { path: ["tasks"], tasks: root?.tasks },
+      { path: ["tasks", "tasks"], tasks: root?.tasks?.tasks },
+      { path: ["settings", "tasks", "tasks"], tasks: root?.settings?.tasks?.tasks }
+    ];
+    const candidate = candidates.find(({ tasks }) => Array.isArray(tasks) &&
+      tasks.some(definition => definition?.label === task.name));
+    const index = candidate?.tasks.findIndex(definition => definition?.label === task.name) ?? -1;
+    if (!candidate || index < 0) throw new Error(`Definition for "${task.name}" was not found`);
+
+    const edits = modify(
+      text,
+      [...candidate.path, index, "hide"],
+      hidden ? true : undefined,
+      { formattingOptions: { insertSpaces: true, tabSize: 2 } }
+    );
+    const updated = applyEdits(text, edits);
+    const fullRange = new vscode.Range(
+      document.positionAt(0),
+      document.positionAt(text.length)
+    );
+    const workspaceEdit = new vscode.WorkspaceEdit();
+    workspaceEdit.replace(uri, fullRange, updated);
+    if (!await vscode.workspace.applyEdit(workspaceEdit) || !await document.save()) {
+      throw new Error("The task configuration could not be saved");
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Could not ${hidden ? "hide" : "unhide"} "${task.name}": ${error.message || error}`
     );
   }
 }

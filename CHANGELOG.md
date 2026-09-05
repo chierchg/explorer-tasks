@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Respect `hide` in task definitions.
+- Add UI controls for hiding, revealing, and unhiding tasks.
+- Visually deemphasize revealed hidden tasks, and keep them visible while running.
+
 ## 0.4.0
 
 - Add task icons with optional theme colors and a neutral default icon.

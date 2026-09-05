@@ -2,25 +2,26 @@
 
 Run tasks directly from the Explorer tab. 
 
-- Show tasks explicitly defined in `.vscode/tasks.json`.
-- Preserve the order of tasks in the configuration file.
+- Show tasks defined in `.vscode/tasks.json` with order preserved.
 - Run and stop tasks with a single click.
+- Hide individual tasks or reveal hidden tasks.
 - Group tasks using ` / ` in their labels.
 - Customize task icons and colors.
 
-## Controls
+## Task controls
 
 - Click an idle task to run it.
 - Click the Stop action to terminate a running task.
-- Click the pencil action to open its definition in `tasks.json`.
-- Click Refresh to reload the task list manually. 
-- Changes to `tasks.json` refresh the task list automatically.
+- Click the Edit action to open its definition in `tasks.json`.
+- Click the Hide action to exclude a task from the view.
+- Click the Unhide action to reveal a hidden task.
 
-## View options
+## Toolbar actions
 
-- Grouping is enabled when at least one task label contains ` / `.
-- Tasks can be displayed in a flat list or a tree view with groups.
-- Groups can start expanded or collapsed by default.
+- Reload the task list manually.
+- Switch between Flat View and Tree View (only when groups exist).
+- Expand or Collapse groups by default (only in Tree View).
+- Show hidden tasks (only when hidden tasks exist).
 
 ## Organize tasks into groups
 
@@ -29,6 +30,7 @@ Run tasks directly from the Explorer tab.
 - Labels without ` / ` stay at the root. 
 - Use the complete label when referencing a task in `dependsOn` or `preLaunchTask`.
 - Ordinary slashes and colons are treated as part of the label.
+- Add `"hide": true` to a task definition to hide it from the view.
 
 ```json
 {

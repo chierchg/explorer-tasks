@@ -56,6 +56,68 @@ test("tasks without a configured icon use a neutral gear", async () => {
   assert.equal(item.iconPath.id, "gear");
 });
 
+test("hidden tasks are excluded by default and can be revealed", async () => {
+  const app = setup();
+  const tasks = ["Visible", "Hidden"].map(name => ({ ...task, name }));
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [
+        { label: "Visible", type: "shell" },
+        { label: "Hidden", type: "shell", hide: true }
+      ] }) };
+  app.vscode.tasks.fetchTasks = async () => tasks;
+  assert.equal((await app.provider.getChildren()).map(item => item.label).join("|"), "Visible");
+  assert.equal(app.contexts.get("explorerTasks.hasHiddenTasks"), true);
+  await app.provider.setShowHidden(true);
+  const shown = await app.provider.getChildren();
+  assert.equal(shown.map(item => item.label).join("|"), "Visible|Hidden");
+  assert.equal(shown[1].contextValue, "explorerTaskHidden");
+  assert.equal(shown[1].description, "Hidden");
+  assert.equal(shown[1].resourceUri.scheme, "explorer-task-hidden");
+  assert.equal(shown[1].iconPath.color.id, "list.deemphasizedForeground");
+  assert.equal(
+    app.decorationProvider.provideFileDecoration(shown[1].resourceUri).color.id,
+    "list.deemphasizedForeground"
+  );
+  assert.equal(
+    app.decorationProvider.provideFileDecoration({ scheme: "file" }),
+    undefined
+  );
+});
+
+test("a hidden task remains visible until its final execution stops", async () => {
+  const active = [execution(), execution()];
+  const app = setup(active);
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [
+        { label: "watch", type: "shell", hide: true }
+      ] }) };
+
+  let [item] = await app.provider.getChildren();
+  assert.equal(item.label, "watch");
+  assert.equal(item.running, true);
+  assert.equal(item.contextValue, "explorerTaskHiddenRunning");
+
+  app.end(active[0]);
+  app.vscode.tasks.taskExecutions = [active[1]];
+  [item] = await app.provider.getChildren();
+  assert.equal(item.running, true);
+
+  app.end(active[1]);
+  app.vscode.tasks.taskExecutions = [];
+  assert.equal((await app.provider.getChildren()).length, 0);
+});
+
+test("Hide and Unhide safely edit the matched JSONC task property", async () => {
+  const app = setup();
+  const item = { task: { ...task, scope: { uri: "file:///workspace" } } };
+  await app.commands.get("explorerTasks.hideTask")(item);
+  assert.equal(JSON.parse(app.getDocumentText()).tasks[0].hide, true);
+  await app.commands.get("explorerTasks.unhideTask")(item);
+  assert.equal("hide" in JSON.parse(app.getDocumentText()).tasks[0], false);
+});
+
 test("JSON order drives nested groups and leaves, independent of fetch order", async () => {
   const app = setup();
   const names = ["Z / Second", "Plain", "A / Nested / Last", "Z / First", "path/to/file", "Bad /  / Name"];
@@ -106,9 +168,11 @@ function setup(initial = []) {
   const uiCommands = [];
   const openedDocuments = [];
   const editor = { selection: undefined, revealRange() {} };
+  let documentText = '{"tasks":[{"label":"watch","type":"shell"}]}';
   const contexts = new Map();
+  const workspaceValues = new Map();
   const explorerSettings = { "grouping.expanded": true, viewMode: "tree" };
-  let provider, start, end;
+  let provider, decorationProvider, start, end;
   const disposable = () => ({ disposed: false, dispose() { this.disposed = true; } });
   const vscode = {
     TaskScope: { Global: 1, Workspace: 2 },
@@ -125,6 +189,9 @@ function setup(initial = []) {
     ThemeColor: class { constructor(id) { this.id = id; } },
     Range: class { constructor(start, end) { this.start = start; this.end = end; } },
     Selection: class { constructor(start, end) { this.start = start; this.end = end; } },
+    WorkspaceEdit: class {
+      replace(uri, range, text) { this.replacement = { uri, range, text }; }
+    },
     TextEditorRevealType: { InCenterIfOutsideViewport: 0 },
     MarkdownString: class {
       constructor() { this.value = ""; }
@@ -141,7 +208,10 @@ function setup(initial = []) {
       onDidStartTask: callback => { start = callback; return disposable(); },
       onDidEndTask: callback => { end = callback; return disposable(); }
     },
-    Uri: { joinPath: (...parts) => parts.join("/") },
+    Uri: {
+      joinPath: (...parts) => parts.join("/"),
+      parse: value => ({ scheme: value.slice(0, value.indexOf(":")), value })
+    },
     commands: {
       registerCommand: (name, callback) => { commands.set(name, callback); return disposable(); },
       executeCommand: (name, item, value) => {
@@ -156,6 +226,7 @@ function setup(initial = []) {
     },
     window: {
       createTreeView: (_, options) => { provider = options.treeDataProvider; return treeView; },
+      registerFileDecorationProvider: value => { decorationProvider = value; return disposable(); },
       showTextDocument: async () => editor,
       showErrorMessage: message => errors.push(message)
     },
@@ -168,18 +239,32 @@ function setup(initial = []) {
         : { inspect: () => ({ workspaceValue: [{ label: "watch" }] }) },
       openTextDocument: async uri => {
         openedDocuments.push(uri);
-        const text = '{"tasks":[{"label":"watch"}]}';
-        return { getText: () => text, positionAt: offset => offset };
+        return {
+          getText: () => documentText,
+          positionAt: offset => offset,
+          save: async () => true
+        };
+      },
+      applyEdit: async edit => {
+        documentText = edit.replacement.text;
+        return true;
       },
       onDidChangeConfiguration: () => disposable(),
       onDidChangeWorkspaceFolders: () => disposable(),
       createFileSystemWatcher: () => ({ ...disposable(), onDidCreate() {}, onDidChange() {}, onDidDelete() {} })
     }
   };
-  const sandbox = { require: name => { assert.equal(name, "vscode"); return vscode; }, module: { exports: {} } };
+  const sandbox = { require: name => name === "vscode" ? vscode : require(name), module: { exports: {} } };
   vm.runInNewContext(source, sandbox);
-  sandbox.module.exports.activate({ subscriptions, extensionUri: "extension" });
-  return { provider, vscode, commands, contexts, editor, errors, emitters, openedDocuments, subscriptions, treeView, uiCommands,
+  sandbox.module.exports.activate({
+    subscriptions,
+    extensionUri: "extension",
+    workspaceState: {
+      get: (key, fallback) => workspaceValues.has(key) ? workspaceValues.get(key) : fallback,
+      update: async (key, value) => workspaceValues.set(key, value)
+    }
+  });
+  return { provider, decorationProvider, vscode, commands, contexts, editor, errors, emitters, getDocumentText: () => documentText, openedDocuments, subscriptions, treeView, uiCommands,
     start: value => start({ execution: value }), end: value => end({ execution: value }) };
 }
 

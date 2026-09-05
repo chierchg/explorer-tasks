@@ -10,7 +10,9 @@ From the repository root:
 npm ci
 ```
 
-The extension has no runtime npm dependencies.
+The extension uses `jsonc-parser` at runtime to preserve comments and formatting
+when hide/unhide actions edit task definitions. Packaging must include this
+dependency; verify it appears in the VSIX file list.
 
 ## Develop and test
 
@@ -31,6 +33,7 @@ Before completing a release, manually verify:
 - The Modify action opens the correct task definition without selecting text.
 - Running state updates for tasks started inside and outside the extension.
 - Task details appear in tooltips.
+- Per-task hide/unhide and the conditional show-hidden control preserve JSONC formatting; revealed hidden tasks are visually deemphasized and running hidden tasks remain visible until their final execution stops.
 - Nested ` / ` groups, expansion controls, and flat/tree switching work.
 - View controls appear only when grouped tasks exist and show the correct icons.
 - Editing `tasks.json` refreshes the view.

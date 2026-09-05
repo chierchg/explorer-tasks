@@ -12,7 +12,6 @@
         "cwd": "${workspaceFolder}"
       },
       "group": "test",
-      "problemMatcher": []
     },
     {
       "label": "Release / 1. Increase version",
@@ -22,7 +21,6 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
-      "problemMatcher": []
     },
     {
       "label": "Release / 2. Build package",
@@ -33,7 +31,6 @@
         "cwd": "${workspaceFolder}"
       },
       "group": "build",
-      "problemMatcher": []
     },
     {
       "label": "Release / 3. Push release",
