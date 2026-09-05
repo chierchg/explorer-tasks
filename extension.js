@@ -32,7 +32,7 @@ class TasksProvider {
       const tasks = await vscode.tasks.fetchTasks();
 
       const ordered = tasks
-        .map(task => ({ task, index: projectTaskIndex(task) }))
+        .map(task => ({ task, ...projectTaskMatch(task) }))
         .filter(entry => entry.index >= 0)
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
 
@@ -55,7 +55,7 @@ class TasksProvider {
         groupsExpanded
       );
 
-      const items = ordered.map(({ task }) => {
+      const items = ordered.map(({ task, definition }) => {
         const key = taskKey(task);
         const executions = new Set(this.runningTasks.get(key) || []);
         for (const execution of vscode.tasks.taskExecutions) {
@@ -63,7 +63,12 @@ class TasksProvider {
             executions.add(execution);
           }
         }
-        return new TaskItem(task, key, executions.size > 0);
+        return new TaskItem(
+          task,
+          key,
+          executions.size > 0,
+          configuredTaskIcon(definition)
+        );
       });
 
       return mode === "flat"
@@ -123,7 +128,7 @@ class TasksProvider {
 }
 
 class TaskItem extends vscode.TreeItem {
-  constructor(task, key, running) {
+  constructor(task, key, running, icon) {
     super(
       task.name,
       vscode.TreeItemCollapsibleState.None
@@ -139,6 +144,13 @@ class TaskItem extends vscode.TreeItem {
 
     if (running) {
       this.iconPath = new vscode.ThemeIcon("sync~spin");
+    } else if (icon) {
+      this.iconPath = new vscode.ThemeIcon(
+        icon.id,
+        icon.color ? new vscode.ThemeColor(icon.color) : undefined
+      );
+    } else {
+      this.iconPath = new vscode.ThemeIcon("gear");
     }
 
     if (!running) {
@@ -473,9 +485,9 @@ function viewMode() {
     : "tree";
 }
 
-function projectTaskIndex(task) {
+function projectTaskMatch(task) {
   if (task.scope === vscode.TaskScope.Global || !task.scope) {
-    return -1;
+    return { index: -1, definition: undefined };
   }
 
   const folder = typeof task.scope === "object" ? task.scope : undefined;
@@ -486,7 +498,7 @@ function projectTaskIndex(task) {
     ? configuration?.workspaceFolderValue ?? configuration?.workspaceValue
     : configuration?.workspaceValue;
 
-  return Array.isArray(definitions) ? definitions.findIndex(definition => {
+  const index = Array.isArray(definitions) ? definitions.findIndex(definition => {
     if (!definition || typeof definition !== "object") return false;
     if (definition.type && definition.type !== task.definition.type) return false;
     if (definition.label) return definition.label === task.name;
@@ -501,6 +513,24 @@ function projectTaskIndex(task) {
         stableStringify(definition[key]) === stableStringify(task.definition[key])
       );
   }) : -1;
+
+  return {
+    index,
+    definition: index >= 0 ? definitions[index] : undefined
+  };
+}
+
+function configuredTaskIcon(definition) {
+  const icon = definition?.icon;
+  if (!icon || typeof icon !== "object") return undefined;
+  if (typeof icon.id !== "string" || !icon.id.trim()) return undefined;
+
+  return {
+    id: icon.id.trim(),
+    color: typeof icon.color === "string" && icon.color.trim()
+      ? icon.color.trim()
+      : undefined
+  };
 }
 
 function taskKey(task) {

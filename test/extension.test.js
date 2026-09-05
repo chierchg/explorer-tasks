@@ -36,6 +36,26 @@ test("task detail appears safely in its tooltip", async () => {
   assert.match(item.tooltip.value, /Click to run/);
 });
 
+test("configured task icons and colors are shown", async () => {
+  const app = setup();
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [{
+        label: "watch",
+        type: "shell",
+        icon: { id: "beaker", color: "charts.green" }
+      }] }) };
+  const [item] = await app.provider.getChildren();
+  assert.equal(item.iconPath.id, "beaker");
+  assert.equal(item.iconPath.color.id, "charts.green");
+});
+
+test("tasks without a configured icon use a neutral gear", async () => {
+  const app = setup();
+  const [item] = await app.provider.getChildren();
+  assert.equal(item.iconPath.id, "gear");
+});
+
 test("JSON order drives nested groups and leaves, independent of fetch order", async () => {
   const app = setup();
   const names = ["Z / Second", "Plain", "A / Nested / Last", "Z / First", "path/to/file", "Bad /  / Name"];
@@ -101,7 +121,8 @@ function setup(initial = []) {
     },
     TreeItem: class { constructor(label, collapsibleState) { this.label = label; this.collapsibleState = collapsibleState; } },
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
-    ThemeIcon: class { constructor(id) { this.id = id; } },
+    ThemeIcon: class { constructor(id, color) { this.id = id; this.color = color; } },
+    ThemeColor: class { constructor(id) { this.id = id; } },
     Range: class { constructor(start, end) { this.start = start; this.end = end; } },
     Selection: class { constructor(start, end) { this.start = start; this.end = end; } },
     TextEditorRevealType: { InCenterIfOutsideViewport: 0 },

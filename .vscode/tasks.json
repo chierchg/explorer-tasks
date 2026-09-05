@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "0. Regression tests",
+      "label": "Regression tests",
       "type": "process",
       "command": "node",
       "args": [
@@ -15,7 +15,7 @@
       "problemMatcher": []
     },
     {
-      "label": "1. Increase version",
+      "label": "Release / 1. Increase version",
       "detail": "Updates package.json and package-lock.json, then creates a Git commit and version tag.",
       "type": "shell",
       "command": "npm version ${input:versionBump}",
@@ -25,7 +25,7 @@
       "problemMatcher": []
     },
     {
-      "label": "2. Build package",
+      "label": "Release / 2. Build package",
       "detail": "Builds the VSIX package for Marketplace publication.",
       "type": "shell",
       "command": "npm run package",
@@ -36,7 +36,7 @@
       "problemMatcher": []
     },
     {
-      "label": "3. Push release",
+      "label": "Release / 3. Push release",
       "detail": "Pushes the current branch and its annotated version tags to origin.",
       "type": "process",
       "command": "git",
@@ -52,7 +52,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Extension Test / Quick success",
+      "label": "-- Tests -- / Quick success",
       "type": "process",
       "command": "node",
       "args": [
@@ -62,7 +62,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Extension Test / Expected failure",
+      "label": "-- Tests -- / Expected failure",
       "type": "process",
       "command": "node",
       "args": [
@@ -72,7 +72,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Extension Test / Concurrent long-running",
+      "label": "-- Tests -- / Concurrent long-running",
       "type": "process",
       "command": "node",
       "args": [
@@ -85,7 +85,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Extension Test / Nested / Labels: path/to/file",
+      "label": "-- Tests -- / Nested / Labels: path/to/file",
       "type": "process",
       "command": "node",
       "args": [

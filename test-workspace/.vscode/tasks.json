@@ -2,8 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Extension Test / Quick success",
+      "label": "Quick success",
       "detail": "This task is used to test the Explorer Tasks view. It should complete successfully.",
+      "icon": {"id": "archive", "color": "terminal.ansiRed"},
       "type": "process",
       "command": "node",
       "args": [
@@ -13,7 +14,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Extension Test / Expected failure",
+      "label": "More Tests / Expected failure",
       "detail": "This task is used to test the Explorer Tasks view. It should fail as expected.",
       "type": "process",
       "command": "node",
@@ -24,8 +25,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Extension Test / Concurrent long-running",
+      "label": "More Tests / Concurrent long-running",
       "detail": "This task is used to test the Explorer Tasks view. It should run until stopped.",
+      "icon": {"id": "play", "color": "terminal.ansiGreen"},
       "type": "process",
       "command": "node",
       "args": [
@@ -38,8 +40,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Extension Test / Nested / Labels: path/to/file",
+      "label": "More Tests / Nested / Labels: path/to/file",
       "detail": "This task is used to test the Explorer Tasks view. It tests nested grouping and literal label characters.",
+      "icon": {"id": "gear", "color": "charts.yellow"},
       "type": "process",
       "command": "node",
       "args": [

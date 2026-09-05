@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add task icons with optional theme colors and a neutral default icon.
+
 ## 0.3.1
 
 - Show view controls from their default state when the workspace has no `settings.json`.

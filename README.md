@@ -21,10 +21,50 @@ The **Explorer Tasks** extension allows you to view and run tasks directly from 
 - Tasks can be displayed in a flat list or a tree view with groups.
 - Groups can be set to start expanded or collapsed. 
 
+## Task icons
+
+Tasks use a neutral gear icon by default. Add an `icon` object to a task to use
+any valid [Codicon ID](https://microsoft.github.io/vscode-codicons/dist/codicon.html) and, optionally, a [theme color](https://code.visualstudio.com/api/references/theme-color) for the icon.
+
+```json
+{
+  "label": "Build",
+  "type": "shell",
+  "command": "npm run build",
+  "icon": {
+    "id": "package",
+    "color": "charts.blue"
+  }
+}
+```
+
+The running indicator temporarily replaces the configured icon while the task
+is active.
+
+Useful theme colors for task icons include:
+
+```json
+"color": "charts.blue"
+"color": "charts.green"
+"color": "charts.yellow"
+"color": "charts.orange"
+"color": "charts.red"
+"color": "charts.purple"
+"color": "charts.foreground"
+
+"color": "terminal.ansiBlue"
+"color": "terminal.ansiGreen"
+"color": "terminal.ansiYellow"
+"color": "terminal.ansiRed"
+"color": "terminal.ansiMagenta"
+"color": "terminal.ansiCyan"
+"color": "terminal.ansiWhite"
+```
+
 ## Organize tasks into groups
 
 - Separate parts of a task label with ` / ` to create folders. 
-- **Groups can be nested!**
+- Groups can be nested!
 - Labels without ` / ` stay at the root. 
 - Use the complete label when referencing a task in `dependsOn` or `preLaunchTask`.
 - Ordinary slashes and colons are treated as part of the label.
