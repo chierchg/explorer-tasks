@@ -1,0 +1,398 @@
+const vscode = require("vscode");
+
+class TasksProvider {
+  constructor() {
+    this._onDidChangeTreeData = new vscode.EventEmitter();
+    this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+    this.runningTasks = new Map();
+
+    // Pick up tasks that were already running before
+    // this view/extension was activated.
+    for (const execution of vscode.tasks.taskExecutions) {
+      this.markRunning(execution);
+    }
+  }
+
+  refresh() {
+    this._onDidChangeTreeData.fire();
+  }
+
+  dispose() {
+    this._onDidChangeTreeData.dispose();
+    this.runningTasks.clear();
+  }
+
+  async getChildren(element) {
+    if (element) {
+      return element.children || [];
+    }
+
+    try {
+      const tasks = await vscode.tasks.fetchTasks();
+
+      const ordered = tasks
+        .map(task => ({ task, index: projectTaskIndex(task) }))
+        .filter(entry => entry.index >= 0)
+        .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
+
+      return buildTree(ordered.map(({ task }) => {
+        const key = taskKey(task);
+        return new TaskItem(task, key, this.runningTasks.has(key));
+      }));
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        `Could not load tasks: ${error.message || error}`
+      );
+
+      return [];
+    }
+  }
+
+  getTreeItem(element) {
+    return element;
+  }
+
+  markRunning(execution) {
+    const key = taskKey(execution.task);
+    let executions = this.runningTasks.get(key);
+
+    if (!executions) {
+      executions = new Set();
+      this.runningTasks.set(key, executions);
+    }
+
+    executions.add(execution);
+
+    this.refresh();
+  }
+
+  markStopped(execution) {
+    const key = taskKey(execution.task);
+    const executions = this.runningTasks.get(key);
+
+    if (executions) {
+      executions.delete(execution);
+
+      if (executions.size === 0) {
+        this.runningTasks.delete(key);
+      }
+    }
+
+    this.refresh();
+  }
+
+  getExecution(item) {
+    return (
+      this.runningTasks.get(item.key)?.values().next().value ||
+      vscode.tasks.taskExecutions.find(
+        execution =>
+          taskKey(execution.task) === item.key
+      )
+    );
+  }
+}
+
+class TaskItem extends vscode.TreeItem {
+  constructor(task, key, running) {
+    super(
+      task.name,
+      vscode.TreeItemCollapsibleState.None
+    );
+
+    this.task = task;
+    this.key = key;
+    this.running = running;
+
+    this.contextValue = running
+      ? "explorerTaskRunning"
+      : "explorerTask";
+
+    this.command = {
+      command: running
+        ? "explorerTasks.stopTask"
+        : "explorerTasks.runTask",
+
+      title: running
+        ? "Stop Task"
+        : "Run Task",
+
+      arguments: [this]
+    };
+
+    this.tooltip = new vscode.MarkdownString();
+
+    if (running) {
+      this.tooltip.appendMarkdown(
+        `**${escapeMarkdown(task.name)}**\n\n`
+      );
+
+      this.tooltip.appendMarkdown(
+        `$(debug-stop) Running — click to stop`
+      );
+    } else {
+      this.tooltip.appendMarkdown(
+        `**${escapeMarkdown(task.name)}**\n\n`
+      );
+
+      this.tooltip.appendMarkdown(
+        `$(play) Click to run`
+      );
+    }
+
+    this.tooltip.supportThemeIcons = true;
+  }
+}
+
+function activate(context) {
+  const provider = new TasksProvider();
+
+  const treeView = vscode.window.createTreeView(
+    "explorerTasks.tasksView",
+    { treeDataProvider: provider, showCollapseAll: false }
+  );
+
+  const clearTaskSelection = async item => {
+    if (!treeView.selection.some(selected => selected.key === item.key)) return;
+    // list.clear targets the last focused list, so explicitly target this view.
+    try {
+      await vscode.commands.executeCommand("explorerTasks.tasksView.focus");
+      await vscode.commands.executeCommand("list.clear");
+    } catch {
+      // A UI-only command failure must not prevent task execution.
+    }
+  };
+
+  const runCommand = vscode.commands.registerCommand(
+    "explorerTasks.runTask",
+    async item => {
+      if (!item?.task) {
+        return;
+      }
+
+      try {
+        await clearTaskSelection(item);
+        // Task events own running state, including tasks that finish quickly.
+        await vscode.tasks.executeTask(item.task);
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Could not run "${item.task.name}": ${
+            error.message || error
+          }`
+        );
+      }
+    }
+  );
+
+  const stopCommand = vscode.commands.registerCommand(
+    "explorerTasks.stopTask",
+    async item => {
+      if (!item) {
+        return;
+      }
+
+      await clearTaskSelection(item);
+
+      const execution =
+        provider.getExecution(item);
+
+      if (execution) {
+        execution.terminate();
+      }
+    }
+  );
+
+  const refreshCommand = vscode.commands.registerCommand(
+    "explorerTasks.refresh",
+    () => {
+      provider.refresh();
+    }
+  );
+
+  const startListener =
+    vscode.tasks.onDidStartTask(event => {
+      provider.markRunning(event.execution);
+    });
+
+  const endListener =
+    vscode.tasks.onDidEndTask(event => {
+      provider.markStopped(event.execution);
+    });
+
+  const workspaceListener =
+    vscode.workspace.onDidChangeWorkspaceFolders(
+      () => provider.refresh()
+    );
+
+  const configurationListener =
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration("tasks")) {
+        provider.refresh();
+      }
+    });
+
+  const taskWatcher =
+    vscode.workspace.createFileSystemWatcher(
+      "**/.vscode/tasks.json"
+    );
+
+  taskWatcher.onDidCreate(
+    () => provider.refresh()
+  );
+
+  taskWatcher.onDidChange(
+    () => provider.refresh()
+  );
+
+  taskWatcher.onDidDelete(
+    () => provider.refresh()
+  );
+
+  context.subscriptions.push(
+    provider,
+    treeView,
+    runCommand,
+    stopCommand,
+    refreshCommand,
+    startListener,
+    endListener,
+    workspaceListener,
+    configurationListener,
+    taskWatcher
+  );
+}
+
+function deactivate() {}
+
+function scopeOrder(task) {
+  if (task.scope === vscode.TaskScope.Workspace) return -1;
+  return (vscode.workspace.workspaceFolders || []).findIndex(
+    folder => folder.uri.toString() === task.scope?.uri?.toString()
+  );
+}
+
+// A spaced slash is reserved for grouping; ordinary paths and colons stay literal.
+function buildTree(items) {
+  const roots = [];
+  for (const item of items) {
+    const parts = item.task.name.split(" / ").map(part => part.trim());
+    if (parts.some(part => !part)) {
+      roots.push(item);
+      continue;
+    }
+    let children = roots;
+    const path = [];
+    for (const part of parts.slice(0, -1)) {
+      path.push(part);
+      let group = children.find(child => child.children && child.label === part);
+      if (!group) {
+        group = new vscode.TreeItem(part, vscode.TreeItemCollapsibleState.Expanded);
+        group.id = "group:" + JSON.stringify(path);
+        group.contextValue = "explorerTaskGroup";
+        group.iconPath = new vscode.ThemeIcon("folder");
+        group.children = [];
+        children.push(group);
+      }
+      children = group.children;
+    }
+    item.label = parts[parts.length - 1];
+    children.push(item);
+  }
+  return roots;
+}
+
+function projectTaskIndex(task) {
+  if (task.scope === vscode.TaskScope.Global || !task.scope) {
+    return -1;
+  }
+
+  const folder = typeof task.scope === "object" ? task.scope : undefined;
+  const configuration = vscode.workspace
+    .getConfiguration("tasks", folder?.uri)
+    .inspect("tasks");
+  const definitions = folder
+    ? configuration?.workspaceFolderValue ?? configuration?.workspaceValue
+    : configuration?.workspaceValue;
+
+  return Array.isArray(definitions) ? definitions.findIndex(definition => {
+    if (!definition || typeof definition !== "object") return false;
+    if (definition.type && definition.type !== task.definition.type) return false;
+    if (definition.label) return definition.label === task.name;
+
+    // Provider tasks can be explicitly configured without a label.
+    const identityKeys = Object.keys(task.definition).filter(
+      key => key !== "type" && key !== "_key"
+    );
+    const configuredKeys = identityKeys.filter(key => key in definition);
+    return definition.type === task.definition.type && configuredKeys.length > 0 &&
+      configuredKeys.every(key =>
+        stableStringify(definition[key]) === stableStringify(task.definition[key])
+      );
+  }) : -1;
+}
+
+function taskKey(task) {
+  let scope = "";
+
+  if (
+    task.scope &&
+    typeof task.scope === "object" &&
+    task.scope.uri
+  ) {
+    scope = task.scope.uri.toString();
+  } else {
+    scope = String(task.scope ?? "");
+  }
+
+  const definition = stableStringify(
+    task.definition || {}
+  );
+
+  return JSON.stringify([
+    scope,
+    task.source || "",
+    task.name || "",
+    definition
+  ]);
+}
+
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return (
+      "[" +
+      value.map(stableStringify).join(",") +
+      "]"
+    );
+  }
+
+  const keys = Object.keys(value).sort();
+
+  return (
+    "{" +
+    keys
+      .map(
+        key =>
+          JSON.stringify(key) +
+          ":" +
+          stableStringify(value[key])
+      )
+      .join(",") +
+    "}"
+  );
+}
+
+function escapeMarkdown(value) {
+  return String(value).replace(
+    /([\\`*_{}[\]()#+\-.!])/g,
+    "\\$1"
+  );
+}
+
+module.exports = {
+  activate,
+  deactivate
+};

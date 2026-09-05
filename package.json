@@ -1,0 +1,83 @@
+{
+  "name": "explorer-tasks",
+  "displayName": "Explorer Tasks",
+  "description": "Run VS Code tasks directly from the Explorer.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "check": "node --check extension.js",
+    "test": "node --test",
+    "vscode:prepublish": "npm run check && npm test",
+    "package": "node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\" && vsce package --no-dependencies --allow-missing-repository --skip-license --out dist/explorer-tasks.vsix"
+  },
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "explorerTasks.tasksView",
+          "name": "Tasks"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "explorerTasks.runTask",
+        "title": "Run Task",
+        "icon": "$(play)"
+      },
+      {
+        "command": "explorerTasks.stopTask",
+        "title": "Stop Task",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "explorerTasks.refresh",
+        "title": "Refresh Tasks",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "explorerTasks.runTask",
+          "when": "false"
+        },
+        {
+          "command": "explorerTasks.stopTask",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "explorerTasks.refresh",
+          "when": "view == explorerTasks.tasksView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "explorerTasks.runTask",
+          "when": "view == explorerTasks.tasksView && viewItem == explorerTask",
+          "group": "inline@1"
+        },
+        {
+          "command": "explorerTasks.stopTask",
+          "when": "view == explorerTasks.tasksView && viewItem == explorerTaskRunning",
+          "group": "inline@1"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "@vscode/vsce": "3.9.2"
+  }
+}
