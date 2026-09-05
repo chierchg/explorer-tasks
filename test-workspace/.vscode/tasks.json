@@ -2,30 +2,6 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Project / Build package",
-      "detail": "Builds the VSIX package for Marketplace publication.",
-      "type": "shell",
-      "command": "npm run package",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": []
-    },
-    {
-      "label": "Project / Run regression tests",
-      "type": "process",
-      "command": "node",
-      "args": [
-        "--test"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "test",
-      "problemMatcher": []
-    },
-    {
       "label": "Extension Test / Quick success",
       "type": "process",
       "command": "node",

@@ -2,9 +2,10 @@
   "name": "explorer-tasks",
   "displayName": "Explorer Tasks",
   "description": "Run VS Code tasks directly from the Explorer.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "yokopoco",
   "icon": "icon.png",
+  "pricing": "Free",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -13,12 +14,12 @@
   ],
   "keywords": [
     "tasks",
+    "tasks.json",
     "task runner",
     "explorer",
-    "tasks.json"
+    "productivity"
   ],
   "main": "./extension.js",
-  "private": false,
   "license": "MIT",
   "scripts": {
     "check": "node --check extension.js",
@@ -39,18 +40,57 @@
     "commands": [
       {
         "command": "explorerTasks.runTask",
-        "title": "Run Task",
+        "title": "Run",
+        "category": "Explorer Tasks",
         "icon": "$(play)"
       },
       {
         "command": "explorerTasks.stopTask",
-        "title": "Stop Task",
+        "title": "Stop",
+        "category": "Explorer Tasks",
         "icon": "$(debug-stop)"
       },
       {
         "command": "explorerTasks.refresh",
-        "title": "Refresh Tasks",
+        "title": "Refresh",
+        "category": "Explorer Tasks",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "explorerTasks.openTasksFile",
+        "title": "Open tasks.json",
+        "category": "Explorer Tasks",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "explorerTasks.toggleGroupExpansion",
+        "title": "Toggle Group Expansion",
+        "category": "Explorer Tasks",
+        "icon": "$(list-tree)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "explorerTasks.toggleGroupExpansion",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g",
+        "when": "view == explorerTasks.tasksView"
+      }
+    ],
+    "configuration": {
+      "title": "Explorer Tasks",
+      "properties": {
+        "explorerTasks.grouping.expanded": {
+          "type": "boolean",
+          "default": true,
+          "description": "Expand task groups by default."
+        }
+      }
+    },
+    "viewsWelcome": [
+      {
+        "view": "explorerTasks.tasksView",
+        "contents": "No project tasks found.\n[Open tasks.json](command:explorerTasks.openTasksFile)"
       }
     ],
     "menus": {
@@ -69,6 +109,16 @@
           "command": "explorerTasks.refresh",
           "when": "view == explorerTasks.tasksView",
           "group": "navigation"
+        },
+        {
+          "command": "explorerTasks.openTasksFile",
+          "when": "view == explorerTasks.tasksView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "explorerTasks.toggleGroupExpansion",
+          "when": "view == explorerTasks.tasksView",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

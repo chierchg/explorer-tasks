@@ -73,10 +73,12 @@ function setup(initial = []) {
   const subscriptions = [];
   const treeView = { selection: [], dispose() {} };
   const uiCommands = [];
+  let groupingExpanded = true;
   let provider, start, end;
   const disposable = () => ({ disposed: false, dispose() { this.disposed = true; } });
   const vscode = {
     TaskScope: { Global: 1, Workspace: 2 },
+    ConfigurationTarget: { Workspace: 2 },
     EventEmitter: class {
       constructor() { this.disposed = false; this.listeners = new Set(); emitters.push(this); }
       event = listener => { this.listeners.add(listener); return { dispose: () => this.listeners.delete(listener) }; };
@@ -84,7 +86,7 @@ function setup(initial = []) {
       dispose() { this.disposed = true; this.listeners.clear(); }
     },
     TreeItem: class { constructor(label, collapsibleState) { this.label = label; this.collapsibleState = collapsibleState; } },
-    TreeItemCollapsibleState: { None: 0, Expanded: 2 },
+    TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     ThemeIcon: class { constructor(id) { this.id = id; } },
     MarkdownString: class { appendMarkdown() {} },
     tasks: {
@@ -112,7 +114,12 @@ function setup(initial = []) {
       showErrorMessage: message => errors.push(message)
     },
     workspace: {
-      getConfiguration: () => ({ inspect: () => ({ workspaceValue: [{ label: "watch" }] }) }),
+      getConfiguration: section => section === "explorerTasks"
+        ? {
+            get: () => groupingExpanded,
+            update: async (_, value) => { groupingExpanded = value; }
+          }
+        : { inspect: () => ({ workspaceValue: [{ label: "watch" }] }) },
       onDidChangeConfiguration: () => disposable(),
       onDidChangeWorkspaceFolders: () => disposable(),
       createFileSystemWatcher: () => ({ ...disposable(), onDidCreate() {}, onDidChange() {}, onDidDelete() {} })
@@ -163,7 +170,58 @@ test("a task finishing before executeTask resolves stays stopped", async () => {
 test("Run delegates to VS Code and start events update the view", async () => {
   const app = setup();
   await app.commands.get("explorerTasks.runTask")((await app.provider.getChildren())[0]);
-  assert.equal((await app.provider.getChildren())[0].running, true);
+  const [item] = await app.provider.getChildren();
+  assert.equal(item.running, true);
+  assert.equal(item.iconPath.id, "sync~spin");
+});
+
+test("resolved task metadata does not split running state", async () => {
+  const configured = { ...task, definition: { type: "shell" } };
+  const active = ["first", "second"].map(key => execution({
+    ...configured,
+    source: `resolved-${key}`,
+    definition: { type: "shell", _key: key, resolved: key }
+  }));
+  const app = setup(active);
+  app.vscode.tasks.fetchTasks = async () => [configured];
+  const [item] = await app.provider.getChildren();
+  assert.equal(item.running, true);
+  assert.equal(item.label, "watch");
+});
+
+test("live VS Code executions are reconciled when start events were missed", async () => {
+  const app = setup();
+  app.provider.runningTasks.clear();
+  app.vscode.tasks.taskExecutions = [execution(), execution()];
+  const [item] = await app.provider.getChildren();
+  assert.equal(item.running, true);
+  assert.equal(item.label, "watch");
+});
+
+test("groups can start collapsed", async () => {
+  const app = setup();
+  const grouped = { ...task, name: "Build / Development" };
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: () => false }
+    : { inspect: () => ({ workspaceValue: [{ label: grouped.name }] }) };
+  app.vscode.tasks.fetchTasks = async () => [grouped];
+  const [group] = await app.provider.getChildren();
+  assert.equal(group.collapsibleState, app.vscode.TreeItemCollapsibleState.Collapsed);
+});
+
+test("Open tasks.json delegates to VS Code task configuration", async () => {
+  const app = setup();
+  await app.commands.get("explorerTasks.openTasksFile")();
+  assert.deepEqual(app.uiCommands, ["workbench.action.tasks.configureTaskRunner"]);
+});
+
+test("group expansion can be toggled from its command", async () => {
+  const app = setup();
+  await app.commands.get("explorerTasks.toggleGroupExpansion")();
+  assert.equal(
+    app.vscode.workspace.getConfiguration("explorerTasks").get("grouping.expanded"),
+    false
+  );
 });
 
 test("tasks with the same name in different folders remain independent", async () => {
@@ -209,6 +267,9 @@ test("native tree keeps Run and Stop inline and hidden from the palette", () => 
     assert(manifest.contributes.menus["view/item/context"].some(entry => entry.command === command));
   }
   assert(!manifest.contributes.menus.commandPalette.some(entry => entry.command === "explorerTasks.refresh"));
+  assert(manifest.contributes.viewsWelcome.some(entry =>
+    entry.view === "explorerTasks.tasksView" && entry.contents.includes("explorerTasks.openTasksFile")
+  ));
 });
 
 test("only explicitly configured project tasks are listed", async () => {

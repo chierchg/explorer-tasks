@@ -38,8 +38,14 @@ class TasksProvider {
 
       return buildTree(ordered.map(({ task }) => {
         const key = taskKey(task);
-        return new TaskItem(task, key, this.runningTasks.has(key));
-      }));
+        const executions = new Set(this.runningTasks.get(key) || []);
+        for (const execution of vscode.tasks.taskExecutions) {
+          if (taskKey(execution.task) === key) {
+            executions.add(execution);
+          }
+        }
+        return new TaskItem(task, key, executions.size > 0);
+      }), groupsExpandedByDefault());
     } catch (error) {
       vscode.window.showErrorMessage(
         `Could not load tasks: ${error.message || error}`
@@ -107,6 +113,10 @@ class TaskItem extends vscode.TreeItem {
     this.contextValue = running
       ? "explorerTaskRunning"
       : "explorerTask";
+
+    if (running) {
+      this.iconPath = new vscode.ThemeIcon("sync~spin");
+    }
 
     this.command = {
       command: running
@@ -209,6 +219,26 @@ function activate(context) {
     }
   );
 
+  const openTasksFileCommand = vscode.commands.registerCommand(
+    "explorerTasks.openTasksFile",
+    () => vscode.commands.executeCommand(
+      "workbench.action.tasks.configureTaskRunner"
+    )
+  );
+
+  const toggleGroupExpansionCommand = vscode.commands.registerCommand(
+    "explorerTasks.toggleGroupExpansion",
+    async () => {
+      const configuration = vscode.workspace.getConfiguration("explorerTasks");
+      const expanded = configuration.get("grouping.expanded", true);
+      await configuration.update(
+        "grouping.expanded",
+        !expanded,
+        vscode.ConfigurationTarget.Workspace
+      );
+    }
+  );
+
   const startListener =
     vscode.tasks.onDidStartTask(event => {
       provider.markRunning(event.execution);
@@ -226,7 +256,10 @@ function activate(context) {
 
   const configurationListener =
     vscode.workspace.onDidChangeConfiguration(event => {
-      if (event.affectsConfiguration("tasks")) {
+      if (
+        event.affectsConfiguration("tasks") ||
+        event.affectsConfiguration("explorerTasks.grouping.expanded")
+      ) {
         provider.refresh();
       }
     });
@@ -254,6 +287,8 @@ function activate(context) {
     runCommand,
     stopCommand,
     refreshCommand,
+    openTasksFileCommand,
+    toggleGroupExpansionCommand,
     startListener,
     endListener,
     workspaceListener,
@@ -272,7 +307,7 @@ function scopeOrder(task) {
 }
 
 // A spaced slash is reserved for grouping; ordinary paths and colons stay literal.
-function buildTree(items) {
+function buildTree(items, expanded = true) {
   const roots = [];
   for (const item of items) {
     const parts = item.task.name.split(" / ").map(part => part.trim());
@@ -286,8 +321,13 @@ function buildTree(items) {
       path.push(part);
       let group = children.find(child => child.children && child.label === part);
       if (!group) {
-        group = new vscode.TreeItem(part, vscode.TreeItemCollapsibleState.Expanded);
-        group.id = "group:" + JSON.stringify(path);
+        group = new vscode.TreeItem(
+          part,
+          expanded
+            ? vscode.TreeItemCollapsibleState.Expanded
+            : vscode.TreeItemCollapsibleState.Collapsed
+        );
+        group.id = `group:${expanded}:` + JSON.stringify(path);
         group.contextValue = "explorerTaskGroup";
         group.iconPath = new vscode.ThemeIcon("folder");
         group.children = [];
@@ -299,6 +339,13 @@ function buildTree(items) {
     children.push(item);
   }
   return roots;
+}
+
+function groupsExpandedByDefault() {
+  const configuration = vscode.workspace.getConfiguration("explorerTasks");
+  return configuration.get
+    ? configuration.get("grouping.expanded", true)
+    : true;
 }
 
 function projectTaskIndex(task) {
@@ -344,15 +391,11 @@ function taskKey(task) {
     scope = String(task.scope ?? "");
   }
 
-  const definition = stableStringify(
-    task.definition || {}
-  );
-
+  // A configured task label identifies the task within its workspace scope.
+  // Provider metadata and definitions can be resolved differently per execution.
   return JSON.stringify([
     scope,
-    task.source || "",
-    task.name || "",
-    definition
+    task.name || ""
   ]);
 }
 

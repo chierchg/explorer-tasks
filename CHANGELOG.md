@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Add an action and empty-state shortcut for opening task configuration.
+- Show an animated indicator for running tasks.
+- Add a setting to make task groups start collapsed.
+- Add a command and keyboard shortcut for toggling group expansion.
+
 ## 0.1.1
 
 - Add icon for the extension.
