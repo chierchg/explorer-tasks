@@ -3,6 +3,7 @@
   "tasks": [
     {
       "label": "Extension Test / Quick success",
+      "detail": "This task is used to test the Explorer Tasks view. It should complete successfully.",
       "type": "process",
       "command": "node",
       "args": [
@@ -13,6 +14,7 @@
     },
     {
       "label": "Extension Test / Expected failure",
+      "detail": "This task is used to test the Explorer Tasks view. It should fail as expected.",
       "type": "process",
       "command": "node",
       "args": [
@@ -23,6 +25,7 @@
     },
     {
       "label": "Extension Test / Concurrent long-running",
+      "detail": "This task is used to test the Explorer Tasks view. It should run until stopped.",
       "type": "process",
       "command": "node",
       "args": [
@@ -36,6 +39,7 @@
     },
     {
       "label": "Extension Test / Nested / Labels: path/to/file",
+      "detail": "This task is used to test the Explorer Tasks view. It tests nested grouping and literal label characters.",
       "type": "process",
       "command": "node",
       "args": [

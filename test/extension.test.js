@@ -28,6 +28,14 @@ test("running an unselected task does not change list selection", async () => {
   assert.equal(app.uiCommands.length, 0);
 });
 
+test("task detail appears safely in its tooltip", async () => {
+  const app = setup();
+  app.vscode.tasks.fetchTasks = async () => [{ ...task, detail: "Build *production*" }];
+  const [item] = await app.provider.getChildren();
+  assert.match(item.tooltip.value, /Build \\\*production\\\*/);
+  assert.match(item.tooltip.value, /Click to run/);
+});
+
 test("JSON order drives nested groups and leaves, independent of fetch order", async () => {
   const app = setup();
   const names = ["Z / Second", "Plain", "A / Nested / Last", "Z / First", "path/to/file", "Bad /  / Name"];
@@ -73,7 +81,10 @@ function setup(initial = []) {
   const subscriptions = [];
   const treeView = { selection: [], dispose() {} };
   const uiCommands = [];
-  let groupingExpanded = true;
+  const openedDocuments = [];
+  const editor = { selection: undefined, revealRange() {} };
+  const contexts = new Map();
+  const explorerSettings = { "grouping.expanded": true, viewMode: "tree" };
   let provider, start, end;
   const disposable = () => ({ disposed: false, dispose() { this.disposed = true; } });
   const vscode = {
@@ -88,7 +99,13 @@ function setup(initial = []) {
     TreeItem: class { constructor(label, collapsibleState) { this.label = label; this.collapsibleState = collapsibleState; } },
     TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     ThemeIcon: class { constructor(id) { this.id = id; } },
-    MarkdownString: class { appendMarkdown() {} },
+    Range: class { constructor(start, end) { this.start = start; this.end = end; } },
+    Selection: class { constructor(start, end) { this.start = start; this.end = end; } },
+    TextEditorRevealType: { InCenterIfOutsideViewport: 0 },
+    MarkdownString: class {
+      constructor() { this.value = ""; }
+      appendMarkdown(value) { this.value += value; }
+    },
     tasks: {
       taskExecutions: [...initial],
       fetchTasks: async () => [task],
@@ -103,23 +120,33 @@ function setup(initial = []) {
     Uri: { joinPath: (...parts) => parts.join("/") },
     commands: {
       registerCommand: (name, callback) => { commands.set(name, callback); return disposable(); },
-      executeCommand: (name, item) => {
+      executeCommand: (name, item, value) => {
         if (commands.has(name)) return commands.get(name)(item);
+        if (name === "setContext") {
+          contexts.set(item, value);
+          return;
+        }
         uiCommands.push(name);
         if (name === "list.clear") treeView.selection = [];
       }
     },
     window: {
       createTreeView: (_, options) => { provider = options.treeDataProvider; return treeView; },
+      showTextDocument: async () => editor,
       showErrorMessage: message => errors.push(message)
     },
     workspace: {
       getConfiguration: section => section === "explorerTasks"
         ? {
-            get: () => groupingExpanded,
-            update: async (_, value) => { groupingExpanded = value; }
+            get: (key, fallback) => explorerSettings[key] ?? fallback,
+            update: async (key, value) => { explorerSettings[key] = value; }
           }
         : { inspect: () => ({ workspaceValue: [{ label: "watch" }] }) },
+      openTextDocument: async uri => {
+        openedDocuments.push(uri);
+        const text = '{"tasks":[{"label":"watch"}]}';
+        return { getText: () => text, positionAt: offset => offset };
+      },
       onDidChangeConfiguration: () => disposable(),
       onDidChangeWorkspaceFolders: () => disposable(),
       createFileSystemWatcher: () => ({ ...disposable(), onDidCreate() {}, onDidChange() {}, onDidDelete() {} })
@@ -128,7 +155,7 @@ function setup(initial = []) {
   const sandbox = { require: name => { assert.equal(name, "vscode"); return vscode; }, module: { exports: {} } };
   vm.runInNewContext(source, sandbox);
   sandbox.module.exports.activate({ subscriptions, extensionUri: "extension" });
-  return { provider, vscode, commands, errors, emitters, subscriptions, treeView, uiCommands,
+  return { provider, vscode, commands, contexts, editor, errors, emitters, openedDocuments, subscriptions, treeView, uiCommands,
     start: value => start({ execution: value }), end: value => end({ execution: value }) };
 }
 
@@ -145,7 +172,7 @@ for (const preexisting of [false, true]) {
       app.vscode.tasks.taskExecutions = [remaining];
       const [item] = await app.provider.getChildren();
       assert.equal(item.contextValue, "explorerTaskRunning");
-      assert.equal(item.command.command, "explorerTasks.stopTask");
+      assert.equal(item.command, undefined);
       await app.commands.get("explorerTasks.stopTask")(item);
       assert.equal(remaining.terminated, true);
       app.end(remaining);
@@ -173,6 +200,7 @@ test("Run delegates to VS Code and start events update the view", async () => {
   const [item] = await app.provider.getChildren();
   assert.equal(item.running, true);
   assert.equal(item.iconPath.id, "sync~spin");
+  assert.equal(item.command, undefined);
 });
 
 test("resolved task metadata does not split running state", async () => {
@@ -209,10 +237,14 @@ test("groups can start collapsed", async () => {
   assert.equal(group.collapsibleState, app.vscode.TreeItemCollapsibleState.Collapsed);
 });
 
-test("Open tasks.json delegates to VS Code task configuration", async () => {
+test("Modify opens and reveals the task definition without selecting text", async () => {
   const app = setup();
-  await app.commands.get("explorerTasks.openTasksFile")();
-  assert.deepEqual(app.uiCommands, ["workbench.action.tasks.configureTaskRunner"]);
+  await app.commands.get("explorerTasks.modifyTask")({
+    task: { ...task, scope: { uri: "file:///workspace" } }
+  });
+  assert.equal(app.openedDocuments[0], "file:///workspace/.vscode/tasks.json");
+  assert.equal(app.editor.selection.start, 19);
+  assert.equal(app.editor.selection.end, 19);
 });
 
 test("group expansion can be toggled from its command", async () => {
@@ -222,6 +254,41 @@ test("group expansion can be toggled from its command", async () => {
     app.vscode.workspace.getConfiguration("explorerTasks").get("grouping.expanded"),
     false
   );
+});
+
+test("grouped tasks can be displayed as a flat list", async () => {
+  const app = setup();
+  const grouped = { ...task, name: "Build / Development" };
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: key => key === "viewMode" ? "flat" : true }
+    : { inspect: () => ({ workspaceValue: [{ label: grouped.name }] }) };
+  app.vscode.tasks.fetchTasks = async () => [grouped];
+  const [item] = await app.provider.getChildren();
+  assert.equal(item.label, "Build / Development");
+  assert.equal(item.children, undefined);
+  assert.equal(app.contexts.get("explorerTasks.hasTaskGroups"), true);
+});
+
+test("view mode can be toggled from its command", async () => {
+  const app = setup();
+  await app.commands.get("explorerTasks.toggleViewMode")();
+  assert.equal(
+    app.vscode.workspace.getConfiguration("explorerTasks").get("viewMode"),
+    "flat"
+  );
+});
+
+test("state-specific view commands set explicit states", async () => {
+  const app = setup();
+  const configuration = app.vscode.workspace.getConfiguration("explorerTasks");
+  await app.commands.get("explorerTasks.collapseGroups")();
+  assert.equal(configuration.get("grouping.expanded"), false);
+  await app.commands.get("explorerTasks.expandGroups")();
+  assert.equal(configuration.get("grouping.expanded"), true);
+  await app.commands.get("explorerTasks.showFlatView")();
+  assert.equal(configuration.get("viewMode"), "flat");
+  await app.commands.get("explorerTasks.showTreeView")();
+  assert.equal(configuration.get("viewMode"), "tree");
 });
 
 test("tasks with the same name in different folders remain independent", async () => {
@@ -260,15 +327,24 @@ test("activation resources include provider cleanup", () => {
   assert.equal(app.provider.runningTasks.size, 0);
 });
 
-test("native tree keeps Run and Stop inline and hidden from the palette", () => {
+test("Run stays in the context menu while Stop and Modify remain inline", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../package.json"), "utf8"));
-  for (const command of ["explorerTasks.runTask", "explorerTasks.stopTask"]) {
+  for (const command of ["explorerTasks.runTask", "explorerTasks.stopTask", "explorerTasks.modifyTask"]) {
     assert(manifest.contributes.menus.commandPalette.some(entry => entry.command === command && entry.when === "false"));
     assert(manifest.contributes.menus["view/item/context"].some(entry => entry.command === command));
   }
+  const itemMenus = manifest.contributes.menus["view/item/context"];
+  assert(!itemMenus.find(entry => entry.command === "explorerTasks.runTask").group.startsWith("inline"));
+  assert(itemMenus.find(entry => entry.command === "explorerTasks.stopTask").group.startsWith("inline"));
+  assert(itemMenus.find(entry => entry.command === "explorerTasks.modifyTask").group.startsWith("inline"));
   assert(!manifest.contributes.menus.commandPalette.some(entry => entry.command === "explorerTasks.refresh"));
+  const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]));
+  assert.equal(commands.get("explorerTasks.expandGroups").icon, "$(expand-all)");
+  assert.equal(commands.get("explorerTasks.collapseGroups").icon, "$(collapse-all)");
+  assert.equal(commands.get("explorerTasks.showFlatView").icon, "$(list-flat)");
+  assert.equal(commands.get("explorerTasks.showTreeView").icon, "$(list-tree)");
   assert(manifest.contributes.viewsWelcome.some(entry =>
-    entry.view === "explorerTasks.tasksView" && entry.contents.includes("explorerTasks.openTasksFile")
+    entry.view === "explorerTasks.tasksView" && !entry.contents.includes("command:")
   ));
 });
 

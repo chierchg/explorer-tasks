@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Replace the global task-configuration action with an inline action for each task.
+- Make idle task rows run on click while requiring the explicit Stop action for running tasks.
+- Remove the group-expansion keyboard shortcut in favor of UI controls.
+- Add a workspace option for switching between flat and tree views when grouped labels exist.
+- Make view-control icons reflect the action available for the current state.
+- Show configured task details in task tooltips.
+
 ## 0.2.0
 
 - Add an action and empty-state shortcut for opening task configuration.

@@ -57,24 +57,45 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "explorerTasks.openTasksFile",
-        "title": "Open tasks.json",
+        "command": "explorerTasks.modifyTask",
+        "title": "Modify",
         "category": "Explorer Tasks",
-        "icon": "$(go-to-file)"
+        "icon": "$(edit)"
       },
       {
         "command": "explorerTasks.toggleGroupExpansion",
         "title": "Toggle Group Expansion",
         "category": "Explorer Tasks",
-        "icon": "$(list-tree)"
-      }
-    ],
-    "keybindings": [
+        "icon": "$(expand-all)"
+      },
       {
-        "command": "explorerTasks.toggleGroupExpansion",
-        "key": "ctrl+alt+g",
-        "mac": "cmd+alt+g",
-        "when": "view == explorerTasks.tasksView"
+        "command": "explorerTasks.toggleViewMode",
+        "title": "Toggle Flat/Tree View",
+        "category": "Explorer Tasks"
+      },
+      {
+        "command": "explorerTasks.expandGroups",
+        "title": "Expand Groups",
+        "category": "Explorer Tasks",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "explorerTasks.collapseGroups",
+        "title": "Collapse Groups",
+        "category": "Explorer Tasks",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "explorerTasks.showFlatView",
+        "title": "Show Flat View",
+        "category": "Explorer Tasks",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "explorerTasks.showTreeView",
+        "title": "Show Tree View",
+        "category": "Explorer Tasks",
+        "icon": "$(list-tree)"
       }
     ],
     "configuration": {
@@ -84,13 +105,19 @@
           "type": "boolean",
           "default": true,
           "description": "Expand task groups by default."
+        },
+        "explorerTasks.viewMode": {
+          "type": "string",
+          "enum": ["tree", "flat"],
+          "default": "tree",
+          "description": "Display grouped task labels as a tree or a flat list."
         }
       }
     },
     "viewsWelcome": [
       {
         "view": "explorerTasks.tasksView",
-        "contents": "No project tasks found.\n[Open tasks.json](command:explorerTasks.openTasksFile)"
+        "contents": "No project tasks found."
       }
     ],
     "menus": {
@@ -102,35 +129,74 @@
         {
           "command": "explorerTasks.stopTask",
           "when": "false"
+        },
+        {
+          "command": "explorerTasks.modifyTask",
+          "when": "false"
+        },
+        {
+          "command": "explorerTasks.expandGroups",
+          "when": "false"
+        },
+        {
+          "command": "explorerTasks.collapseGroups",
+          "when": "false"
+        },
+        {
+          "command": "explorerTasks.showFlatView",
+          "when": "false"
+        },
+        {
+          "command": "explorerTasks.showTreeView",
+          "when": "false"
+        },
+        {
+          "command": "explorerTasks.toggleViewMode",
+          "when": "explorerTasks.hasTaskGroups"
         }
       ],
       "view/title": [
         {
           "command": "explorerTasks.refresh",
           "when": "view == explorerTasks.tasksView",
-          "group": "navigation"
+          "group": "navigation@3"
         },
         {
-          "command": "explorerTasks.openTasksFile",
-          "when": "view == explorerTasks.tasksView",
+          "command": "explorerTasks.expandGroups",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == tree && config.explorerTasks.grouping.expanded == false",
+          "group": "navigation@1"
+        },
+        {
+          "command": "explorerTasks.collapseGroups",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == tree && config.explorerTasks.grouping.expanded",
+          "group": "navigation@1"
+        },
+        {
+          "command": "explorerTasks.showFlatView",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == tree",
           "group": "navigation@2"
         },
         {
-          "command": "explorerTasks.toggleGroupExpansion",
-          "when": "view == explorerTasks.tasksView",
-          "group": "navigation@3"
+          "command": "explorerTasks.showTreeView",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == flat",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
         {
           "command": "explorerTasks.runTask",
           "when": "view == explorerTasks.tasksView && viewItem == explorerTask",
-          "group": "inline@1"
+          "group": "1_run@1"
         },
         {
           "command": "explorerTasks.stopTask",
           "when": "view == explorerTasks.tasksView && viewItem == explorerTaskRunning",
           "group": "inline@1"
+        },
+        {
+          "command": "explorerTasks.modifyTask",
+          "when": "view == explorerTasks.tasksView && (viewItem == explorerTask || viewItem == explorerTaskRunning)",
+          "group": "inline@2"
         }
       ]
     }

@@ -36,7 +36,14 @@ class TasksProvider {
         .filter(entry => entry.index >= 0)
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
 
-      return buildTree(ordered.map(({ task }) => {
+      const hasTaskGroups = ordered.some(({ task }) => hasGroupPath(task.name));
+      await vscode.commands.executeCommand(
+        "setContext",
+        "explorerTasks.hasTaskGroups",
+        hasTaskGroups
+      );
+
+      const items = ordered.map(({ task }) => {
         const key = taskKey(task);
         const executions = new Set(this.runningTasks.get(key) || []);
         for (const execution of vscode.tasks.taskExecutions) {
@@ -45,7 +52,11 @@ class TasksProvider {
           }
         }
         return new TaskItem(task, key, executions.size > 0);
-      }), groupsExpandedByDefault());
+      });
+
+      return viewMode() === "flat"
+        ? items
+        : buildTree(items, groupsExpandedByDefault());
     } catch (error) {
       vscode.window.showErrorMessage(
         `Could not load tasks: ${error.message || error}`
@@ -118,33 +129,31 @@ class TaskItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon("sync~spin");
     }
 
-    this.command = {
-      command: running
-        ? "explorerTasks.stopTask"
-        : "explorerTasks.runTask",
-
-      title: running
-        ? "Stop Task"
-        : "Run Task",
-
-      arguments: [this]
-    };
+    if (!running) {
+      this.command = {
+        command: "explorerTasks.runTask",
+        title: "Run Task",
+        arguments: [this]
+      };
+    }
 
     this.tooltip = new vscode.MarkdownString();
 
+    this.tooltip.appendMarkdown(
+      `**${escapeMarkdown(task.name)}**\n\n`
+    );
+
+    if (task.detail) {
+      this.tooltip.appendMarkdown(
+        `${escapeMarkdown(task.detail)}\n\n`
+      );
+    }
+
     if (running) {
       this.tooltip.appendMarkdown(
-        `**${escapeMarkdown(task.name)}**\n\n`
-      );
-
-      this.tooltip.appendMarkdown(
-        `$(debug-stop) Running — click to stop`
+        `$(debug-stop) Running — use the Stop action to terminate`
       );
     } else {
-      this.tooltip.appendMarkdown(
-        `**${escapeMarkdown(task.name)}**\n\n`
-      );
-
       this.tooltip.appendMarkdown(
         `$(play) Click to run`
       );
@@ -219,11 +228,9 @@ function activate(context) {
     }
   );
 
-  const openTasksFileCommand = vscode.commands.registerCommand(
-    "explorerTasks.openTasksFile",
-    () => vscode.commands.executeCommand(
-      "workbench.action.tasks.configureTaskRunner"
-    )
+  const modifyTaskCommand = vscode.commands.registerCommand(
+    "explorerTasks.modifyTask",
+    item => openTaskDefinition(item?.task)
   );
 
   const toggleGroupExpansionCommand = vscode.commands.registerCommand(
@@ -237,6 +244,55 @@ function activate(context) {
         vscode.ConfigurationTarget.Workspace
       );
     }
+  );
+
+  const toggleViewModeCommand = vscode.commands.registerCommand(
+    "explorerTasks.toggleViewMode",
+    async () => {
+      const configuration = vscode.workspace.getConfiguration("explorerTasks");
+      const mode = configuration.get("viewMode", "tree");
+      await configuration.update(
+        "viewMode",
+        mode === "tree" ? "flat" : "tree",
+        vscode.ConfigurationTarget.Workspace
+      );
+    }
+  );
+
+  const expandGroupsCommand = vscode.commands.registerCommand(
+    "explorerTasks.expandGroups",
+    () => vscode.workspace.getConfiguration("explorerTasks").update(
+      "grouping.expanded",
+      true,
+      vscode.ConfigurationTarget.Workspace
+    )
+  );
+
+  const collapseGroupsCommand = vscode.commands.registerCommand(
+    "explorerTasks.collapseGroups",
+    () => vscode.workspace.getConfiguration("explorerTasks").update(
+      "grouping.expanded",
+      false,
+      vscode.ConfigurationTarget.Workspace
+    )
+  );
+
+  const showFlatViewCommand = vscode.commands.registerCommand(
+    "explorerTasks.showFlatView",
+    () => vscode.workspace.getConfiguration("explorerTasks").update(
+      "viewMode",
+      "flat",
+      vscode.ConfigurationTarget.Workspace
+    )
+  );
+
+  const showTreeViewCommand = vscode.commands.registerCommand(
+    "explorerTasks.showTreeView",
+    () => vscode.workspace.getConfiguration("explorerTasks").update(
+      "viewMode",
+      "tree",
+      vscode.ConfigurationTarget.Workspace
+    )
   );
 
   const startListener =
@@ -258,7 +314,8 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration(event => {
       if (
         event.affectsConfiguration("tasks") ||
-        event.affectsConfiguration("explorerTasks.grouping.expanded")
+        event.affectsConfiguration("explorerTasks.grouping.expanded") ||
+        event.affectsConfiguration("explorerTasks.viewMode")
       ) {
         provider.refresh();
       }
@@ -287,8 +344,13 @@ function activate(context) {
     runCommand,
     stopCommand,
     refreshCommand,
-    openTasksFileCommand,
+    modifyTaskCommand,
     toggleGroupExpansionCommand,
+    toggleViewModeCommand,
+    expandGroupsCommand,
+    collapseGroupsCommand,
+    showFlatViewCommand,
+    showTreeViewCommand,
     startListener,
     endListener,
     workspaceListener,
@@ -298,6 +360,45 @@ function activate(context) {
 }
 
 function deactivate() {}
+
+async function openTaskDefinition(task) {
+  if (!task) return;
+
+  const folder = typeof task.scope === "object" ? task.scope : undefined;
+  const uri = folder
+    ? vscode.Uri.joinPath(folder.uri, ".vscode", "tasks.json")
+    : vscode.workspace.workspaceFile || (
+        vscode.workspace.workspaceFolders?.[0]
+          ? vscode.Uri.joinPath(
+              vscode.workspace.workspaceFolders[0].uri,
+              ".vscode",
+              "tasks.json"
+            )
+          : undefined
+      );
+
+  if (!uri) return;
+
+  try {
+    const document = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(document);
+    const text = document.getText();
+    const label = JSON.stringify(task.name);
+    const offset = text.indexOf(label);
+
+    if (offset >= 0) {
+      const start = document.positionAt(offset);
+      const end = document.positionAt(offset + label.length);
+      const range = new vscode.Range(start, end);
+      editor.selection = new vscode.Selection(start, start);
+      editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Could not open the task configuration: ${error.message || error}`
+    );
+  }
+}
 
 function scopeOrder(task) {
   if (task.scope === vscode.TaskScope.Workspace) return -1;
@@ -341,11 +442,23 @@ function buildTree(items, expanded = true) {
   return roots;
 }
 
+function hasGroupPath(name) {
+  const parts = name.split(" / ").map(part => part.trim());
+  return parts.length > 1 && parts.every(Boolean);
+}
+
 function groupsExpandedByDefault() {
   const configuration = vscode.workspace.getConfiguration("explorerTasks");
   return configuration.get
     ? configuration.get("grouping.expanded", true)
     : true;
+}
+
+function viewMode() {
+  const configuration = vscode.workspace.getConfiguration("explorerTasks");
+  return configuration.get
+    ? configuration.get("viewMode", "tree")
+    : "tree";
 }
 
 function projectTaskIndex(task) {

@@ -2,18 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Project / Build package",
-      "detail": "Builds the VSIX package for Marketplace publication.",
-      "type": "shell",
-      "command": "npm run package",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "group": "build",
-      "problemMatcher": []
-    },
-    {
-      "label": "Project / Run regression tests",
+      "label": "0. Run regression tests",
       "type": "process",
       "command": "node",
       "args": [
@@ -23,6 +12,27 @@
         "cwd": "${workspaceFolder}"
       },
       "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "1. Increase version",
+      "detail": "Updates package.json and package-lock.json, then creates a Git commit and version tag.",
+      "type": "shell",
+      "command": "npm version ${input:versionBump}",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "2. Build package",
+      "detail": "Builds the VSIX package for Marketplace publication.",
+      "type": "shell",
+      "command": "npm run package",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
       "problemMatcher": []
     },
     {
@@ -67,6 +77,19 @@
         "console.log('Explorer Tasks: nested grouping and literal label characters work')"
       ],
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "versionBump",
+      "type": "pickString",
+      "description": "Select the semantic version bump",
+      "options": [
+        "patch",
+        "minor",
+        "major"
+      ],
+      "default": "patch"
     }
   ]
 }
