@@ -166,22 +166,22 @@
         },
         {
           "command": "explorerTasks.expandGroups",
-          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == tree && config.explorerTasks.grouping.expanded == false",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && explorerTasks.treeViewMode && !explorerTasks.groupsExpanded",
           "group": "navigation@1"
         },
         {
           "command": "explorerTasks.collapseGroups",
-          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == tree && config.explorerTasks.grouping.expanded",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && explorerTasks.treeViewMode && explorerTasks.groupsExpanded",
           "group": "navigation@1"
         },
         {
           "command": "explorerTasks.showFlatView",
-          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == tree",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && explorerTasks.treeViewMode",
           "group": "navigation@2"
         },
         {
           "command": "explorerTasks.showTreeView",
-          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && config.explorerTasks.viewMode == flat",
+          "when": "view == explorerTasks.tasksView && explorerTasks.hasTaskGroups && !explorerTasks.treeViewMode",
           "group": "navigation@2"
         }
       ],

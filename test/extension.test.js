@@ -43,6 +43,9 @@ test("JSON order drives nested groups and leaves, independent of fetch order", a
   app.vscode.workspace.getConfiguration = () => ({ inspect: () => ({ workspaceValue: names.map(label => ({ label })) }) });
   app.vscode.tasks.fetchTasks = async () => [...tasks].reverse();
   const roots = await app.provider.getChildren();
+  assert.equal(app.contexts.get("explorerTasks.hasTaskGroups"), true);
+  assert.equal(app.contexts.get("explorerTasks.treeViewMode"), true);
+  assert.equal(app.contexts.get("explorerTasks.groupsExpanded"), true);
   assert.equal(roots.map(item => item.label).join("|"), "Z|Plain|A|path/to/file|Bad /  / Name");
   const children = await app.provider.getChildren(roots[0]);
   assert.equal(children.map(item => item.label).join("|"), "Second|First");
@@ -343,6 +346,9 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
   assert.equal(commands.get("explorerTasks.collapseGroups").icon, "$(collapse-all)");
   assert.equal(commands.get("explorerTasks.showFlatView").icon, "$(list-flat)");
   assert.equal(commands.get("explorerTasks.showTreeView").icon, "$(list-tree)");
+  assert(manifest.contributes.menus["view/title"]
+    .filter(entry => /Groups|View/.test(entry.command))
+    .every(entry => !entry.when.includes("config.explorerTasks")));
   assert(manifest.contributes.viewsWelcome.some(entry =>
     entry.view === "explorerTasks.tasksView" && !entry.contents.includes("command:")
   ));

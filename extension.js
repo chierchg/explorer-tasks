@@ -37,10 +37,22 @@ class TasksProvider {
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
 
       const hasTaskGroups = ordered.some(({ task }) => hasGroupPath(task.name));
+      const mode = viewMode();
+      const groupsExpanded = groupsExpandedByDefault();
       await vscode.commands.executeCommand(
         "setContext",
         "explorerTasks.hasTaskGroups",
         hasTaskGroups
+      );
+      await vscode.commands.executeCommand(
+        "setContext",
+        "explorerTasks.treeViewMode",
+        mode === "tree"
+      );
+      await vscode.commands.executeCommand(
+        "setContext",
+        "explorerTasks.groupsExpanded",
+        groupsExpanded
       );
 
       const items = ordered.map(({ task }) => {
@@ -54,9 +66,9 @@ class TasksProvider {
         return new TaskItem(task, key, executions.size > 0);
       });
 
-      return viewMode() === "flat"
+      return mode === "flat"
         ? items
-        : buildTree(items, groupsExpandedByDefault());
+        : buildTree(items, groupsExpanded);
     } catch (error) {
       vscode.window.showErrorMessage(
         `Could not load tasks: ${error.message || error}`

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Show view controls from their default state when the workspace has no `settings.json`.
+
 ## 0.3.0
 
 - Replace the global task-configuration action with an inline action for each task.
