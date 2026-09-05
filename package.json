@@ -2,7 +2,7 @@
   "name": "explorer-tasks",
   "displayName": "Explorer Tasks",
   "description": "Run VS Code tasks directly from the Explorer.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "yokopoco",
   "icon": "icon.png",
   "pricing": "Free",
@@ -108,7 +108,10 @@
         },
         "explorerTasks.viewMode": {
           "type": "string",
-          "enum": ["tree", "flat"],
+          "enum": [
+            "tree",
+            "flat"
+          ],
           "default": "tree",
           "description": "Display grouped task labels as a tree or a flat list."
         }
