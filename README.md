@@ -2,7 +2,7 @@
 
 Run tasks directly from the Explorer tab. 
 
-- Show tasks defined in `.vscode/tasks.json` with order preserved.
+- Show tasks defined in `tasks.json` with order preserved.
 - Run and stop tasks with a single click.
 - Hide individual tasks or reveal hidden tasks.
 - Group tasks using ` / ` in their labels.
@@ -16,6 +16,10 @@ Run tasks directly from the Explorer tab.
 - Click the Hide action to exclude a task from the view.
 - Click the Unhide action to reveal a hidden task.
 
+> ### *Note*
+> 
+> Hide action adds `"hidden": true` to the task in `tasks.json`. Unhide action removes it. You can also manually add or remove this property to hide or unhide a task.
+
 ## Toolbar actions
 
 - Reload the task list manually.
@@ -23,14 +27,17 @@ Run tasks directly from the Explorer tab.
 - Expand or Collapse groups by default (only in Tree View).
 - Show hidden tasks (only when hidden tasks exist).
 
+> ### *Note*
+>
+> *Flat/Tree* and *Expand/Collapse* settings are saved per workspace in `.vscode/settings.json`.
+
 ## Organize tasks into groups
 
-- Separate parts of a task label with ` / ` to create folders. 
-- Groups can be nested!
+- Separate parts of a task label with ` / ` to create folders. Use multiple ` / ` to create nested folders.
+- Groups appear where their first task occurs, and tasks within each group keep their JSON order.
 - Labels without ` / ` stay at the root. 
 - Use the complete label when referencing a task in `dependsOn` or `preLaunchTask`.
 - Ordinary slashes and colons are treated as part of the label.
-- Add `"hide": true` to a task definition to hide it from the view.
 
 ```json
 {
@@ -55,12 +62,13 @@ Run tasks directly from the Explorer tab.
 }
 ```
 
-Groups appear where their first task occurs, and tasks within each group keep their JSON order. Keep related tasks together in the file for a matching visual order. 
-
 ## Task icons
 
-Tasks use a neutral gear icon by default. Add an `icon` object to a task to use
-any valid [Codicon ID](https://microsoft.github.io/vscode-codicons/dist/codicon.html) and, optionally, a [theme color](https://code.visualstudio.com/api/references/theme-color) for the icon.
+- Tasks use a neutral gear icon by default. 
+- Add an `icon` object to a task to use any valid [Codicon ID](https://microsoft.github.io/vscode-codicons/dist/codicon.html).
+- Optionally set a [color](https://code.visualstudio.com/api/references/theme-color) for the icon.
+- A running indicator temporarily replaces the configured icon while the task
+is active.
 
 ```json
 {
@@ -73,9 +81,6 @@ any valid [Codicon ID](https://microsoft.github.io/vscode-codicons/dist/codicon.
   }
 }
 ```
-
-The running indicator temporarily replaces the configured icon while the task
-is active.
 
 Useful theme colors for task icons include:
 
