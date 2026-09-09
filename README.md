@@ -2,7 +2,7 @@
 
 Run tasks directly from the Explorer tab. 
 
-- Show tasks defined in `tasks.json` with order preserved.
+- Show tasks defined in `tasks.json` in their original order.
 - Run and stop tasks with a single click.
 - Hide individual tasks or reveal hidden tasks.
 - Group tasks using ` / ` in their labels.
@@ -15,27 +15,30 @@ Run tasks directly from the Explorer tab.
 - Click the Edit action to open its definition in `tasks.json`.
 - Click the Hide action to exclude a task from the view.
 - Click the Unhide action to reveal a hidden task.
-- If a running task is renamed or removed, its original label remains visible
-  with a Stop action until that execution ends.
+- If a running task is renamed or removed, its original label remains visible with a Stop action until that execution ends.
 
-*Note:* Hide action adds `"hide": true` to the task definition in `tasks.json`. Unhide action removes it. In addition to the UI actions, you can manually add or remove this property to hide or unhide a task.
+*Note:* <br/>
+The Hide action adds `"hide": true` to the task definition in `tasks.json`, while the Unhide action removes it. <br/>
+You can hide or unhide tasks by editing `tasks.json` directly.
 
 ## Toolbar actions
 
 - Reload the task list manually.
-- Switch between Flat View and Tree View (only when groups exist).
-- Expand or Collapse groups by default (only in Tree View).
-- Show hidden tasks (only when hidden tasks exist).
+- Switch between Flat View and Tree View when groups exist.
+- Expand or Collapse groups in Tree View.
+- Show hidden tasks if any exist.
 
 *Note:* Flat/Tree and Expand/Collapse settings are saved per workspace in `.vscode/settings.json`.
 
 ## Organize tasks into groups
 
-- Separate parts of a task label with ` / ` to create folders. Use multiple ` / ` to create nested folders.
-- Groups appear where their first task occurs, and tasks within each group keep their JSON order.
-- Labels without ` / ` stay at the root. 
-- Use the complete label when referencing a task in `dependsOn` or `preLaunchTask`.
+- Separate parts of a task label with ` / ` to create folders. 
+- Use multiple ` / ` separators to create nested folders.
+- Groups appear where their first task occurs, and tasks within each group preserve their order from `tasks.json`.
+- Labels without ` / ` remain at the root. 
 - Ordinary slashes and colons are treated as part of the label.
+
+*Important:* Use the complete label when referencing a task in `dependsOn` or `preLaunchTask`.
 
 ```json
 {
@@ -64,9 +67,8 @@ Run tasks directly from the Explorer tab.
 
 - Tasks use a neutral gear icon by default. 
 - Add an `icon` object to a task to use any valid [Codicon ID](https://microsoft.github.io/vscode-codicons/dist/codicon.html).
-- Optionally set a [color](https://code.visualstudio.com/api/references/theme-color) for the icon.
-- A running indicator temporarily replaces the configured icon while the task
-is active.
+- Optionally set a [theme color](https://code.visualstudio.com/api/references/theme-color) for the icon.
+- While a task is running, a running indicator temporarily replaces its configured icon.
 
 ```json
 {
