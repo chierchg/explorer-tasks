@@ -2,7 +2,7 @@
   "name": "explorer-tasks",
   "displayName": "Explorer Tasks",
   "description": "Run VS Code tasks directly from the Explorer.",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "yokopoco",
   "icon": "icon.png",
   "pricing": "Free",
