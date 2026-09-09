@@ -19,6 +19,7 @@ class TasksProvider {
     this.refreshPending = false;
     this.refreshTimer = undefined;
     this.disposed = false;
+    this.contextValues = new Map();
 
     // Pick up tasks that were already running before
     // this view/extension was activated.
@@ -59,6 +60,7 @@ class TasksProvider {
     this.refreshPending = false;
     this._onDidChangeTreeData.dispose();
     this.runningTasks.clear();
+    this.contextValues.clear();
   }
 
   async getChildren(element) {
@@ -89,55 +91,36 @@ class TasksProvider {
     try {
       const tasks = await vscode.tasks.fetchTasks();
       const matchProjectTask = createProjectTaskMatcher();
+      const executionsByTask = this.snapshotExecutions();
 
       const ordered = tasks
-        .map(task => ({ task, ...matchProjectTask(task) }))
+        .map(task => ({ task, key: taskKey(task), ...matchProjectTask(task) }))
         .filter(entry => entry.index >= 0)
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
 
       const hasHiddenTasks = ordered.some(({ definition }) => definition?.hide === true);
       const displayed = this.showHidden
         ? ordered
-        : ordered.filter(({ task, definition }) =>
-            definition?.hide !== true || this.getExecutions(task).size > 0
+        : ordered.filter(({ key, definition }) =>
+            definition?.hide !== true || executionsByTask.has(key)
           );
 
       const hasTaskGroups = displayed.some(({ task }) => hasGroupPath(task.name));
       const mode = viewMode();
       const groupsExpanded = groupsExpandedByDefault();
-      await vscode.commands.executeCommand(
-        "setContext",
-        "explorerTasks.hasHiddenTasks",
-        hasHiddenTasks
-      );
-      await vscode.commands.executeCommand(
-        "setContext",
-        "explorerTasks.showHiddenTasks",
-        this.showHidden
-      );
-      await vscode.commands.executeCommand(
-        "setContext",
-        "explorerTasks.hasTaskGroups",
-        hasTaskGroups
-      );
-      await vscode.commands.executeCommand(
-        "setContext",
-        "explorerTasks.treeViewMode",
-        mode === "tree"
-      );
-      await vscode.commands.executeCommand(
-        "setContext",
-        "explorerTasks.groupsExpanded",
-        groupsExpanded
-      );
+      await this.updateContexts({
+        "explorerTasks.hasHiddenTasks": hasHiddenTasks,
+        "explorerTasks.showHiddenTasks": this.showHidden,
+        "explorerTasks.hasTaskGroups": hasTaskGroups,
+        "explorerTasks.treeViewMode": mode === "tree",
+        "explorerTasks.groupsExpanded": groupsExpanded
+      });
 
-      const items = displayed.map(({ task, definition }) => {
-        const key = taskKey(task);
-        const executions = this.getExecutions(task);
+      const items = displayed.map(({ task, key, definition }) => {
         return new TaskItem(
           task,
           key,
-          executions.size > 0,
+          executionsByTask.has(key),
           configuredTaskIcon(definition),
           definition?.hide === true
         );
@@ -198,15 +181,39 @@ class TasksProvider {
     );
   }
 
-  getExecutions(task) {
-    const key = taskKey(task);
-    const executions = new Set(this.runningTasks.get(key) || []);
+  snapshotExecutions() {
+    const executionsByTask = new Map();
 
-    for (const execution of vscode.tasks.taskExecutions) {
-      if (taskKey(execution.task) === key) executions.add(execution);
+    for (const [key, executions] of this.runningTasks) {
+      if (executions.size > 0) {
+        executionsByTask.set(key, new Set(executions));
+      }
     }
 
-    return executions;
+    for (const execution of vscode.tasks.taskExecutions) {
+      const key = taskKey(execution.task);
+      let executions = executionsByTask.get(key);
+
+      if (!executions) {
+        executions = new Set();
+        executionsByTask.set(key, executions);
+      }
+
+      executions.add(execution);
+    }
+
+    return executionsByTask;
+  }
+
+  async updateContexts(values) {
+    const changes = Object.entries(values).filter(
+      ([key, value]) => this.contextValues.get(key) !== value
+    );
+
+    await Promise.all(changes.map(async ([key, value]) => {
+      await vscode.commands.executeCommand("setContext", key, value);
+      this.contextValues.set(key, value);
+    }));
   }
 
   async setShowHidden(value) {

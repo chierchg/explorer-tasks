@@ -170,6 +170,7 @@ function setup(initial = []) {
   const editor = { selection: undefined, revealRange() {} };
   let documentText = '{"tasks":[{"label":"watch","type":"shell"}]}';
   const contexts = new Map();
+  const contextUpdates = [];
   const workspaceValues = new Map();
   const explorerSettings = { "grouping.expanded": true, viewMode: "tree" };
   const taskWatcherCallbacks = {};
@@ -221,6 +222,7 @@ function setup(initial = []) {
         if (commands.has(name)) return commands.get(name)(item);
         if (name === "setContext") {
           contexts.set(item, value);
+          contextUpdates.push([item, value]);
           return;
         }
         uiCommands.push(name);
@@ -281,7 +283,7 @@ function setup(initial = []) {
       update: async (key, value) => workspaceValues.set(key, value)
     }
   });
-  return { provider, decorationProvider, vscode, commands, contexts, editor, errors, emitters, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, openedDocuments, subscriptions, treeView, uiCommands,
+  return { provider, decorationProvider, vscode, commands, contexts, contextUpdates, editor, errors, emitters, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, openedDocuments, subscriptions, treeView, uiCommands,
     changeConfiguration: event => configurationChanged(event), changeTaskFile: () => taskWatcherCallbacks.change(), changeWorkspaceFolders: () => workspaceFoldersChanged(),
     runTimers: () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); },
     start: value => start({ execution: value }), end: value => end({ execution: value }) };
@@ -380,6 +382,42 @@ test("task lifecycle refreshes remain immediate", () => {
   assert.equal(refreshCount, 1);
   app.runTimers();
   assert.equal(refreshCount, 1);
+});
+
+test("live task executions are snapshotted once per refresh", async () => {
+  const app = setup();
+  const active = [execution(), execution()];
+  let iterations = 0;
+  app.vscode.tasks.taskExecutions = {
+    [Symbol.iterator]() {
+      iterations += 1;
+      return active[Symbol.iterator]();
+    }
+  };
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [{ label: "A" }, { label: "B" }] }) };
+  app.vscode.tasks.fetchTasks = async () => [
+    { ...task, name: "A" },
+    { ...task, name: "B" }
+  ];
+
+  await app.provider.getChildren();
+  assert.equal(iterations, 1);
+});
+
+test("unchanged view contexts are not sent again", async () => {
+  const app = setup();
+
+  await app.provider.getChildren();
+  assert.equal(app.contextUpdates.length, 5);
+  await app.provider.getChildren();
+  assert.equal(app.contextUpdates.length, 5);
+
+  await app.provider.setShowHidden(true);
+  await app.provider.getChildren();
+  assert.equal(app.contextUpdates.length, 6);
+  assert.deepEqual(app.contextUpdates[5], ["explorerTasks.showHiddenTasks", true]);
 });
 
 test("Run delegates to VS Code and start events update the view", async () => {
