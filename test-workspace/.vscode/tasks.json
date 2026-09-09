@@ -47,7 +47,7 @@
     {
       "label": "More Tests / Nested / Labels: path/to/file",
       "detail": "This task is used to test the Explorer Tasks view. It tests nested grouping and literal label characters.",
-      "icon": {"id": "gear", "color": "charts.yellow"},
+      "icon": {"id": "gear", "color": "terminal.ansiYellow"},
       "type": "process",
       "command": "node",
       "args": [

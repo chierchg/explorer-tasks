@@ -39,9 +39,10 @@ class TasksProvider {
 
     try {
       const tasks = await vscode.tasks.fetchTasks();
+      const matchProjectTask = createProjectTaskMatcher();
 
       const ordered = tasks
-        .map(task => ({ task, ...projectTaskMatch(task) }))
+        .map(task => ({ task, ...matchProjectTask(task) }))
         .filter(entry => entry.index >= 0)
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
 
@@ -644,39 +645,81 @@ function viewMode() {
     : "tree";
 }
 
-function projectTaskMatch(task) {
-  if (task.scope === vscode.TaskScope.Global || !task.scope) {
-    return { index: -1, definition: undefined };
+function createProjectTaskMatcher() {
+  const indexesByScope = new Map();
+
+  return task => {
+    if (task.scope === vscode.TaskScope.Global || !task.scope) {
+      return { index: -1, definition: undefined };
+    }
+
+    const folder = typeof task.scope === "object" ? task.scope : undefined;
+    const scopeKey = folder?.uri?.toString() || "workspace";
+    let index = indexesByScope.get(scopeKey);
+
+    if (!index) {
+      const configuration = vscode.workspace
+        .getConfiguration("tasks", folder?.uri)
+        .inspect("tasks");
+      const definitions = folder
+        ? configuration?.workspaceFolderValue ?? configuration?.workspaceValue
+        : configuration?.workspaceValue;
+      index = indexTaskDefinitions(definitions);
+      indexesByScope.set(scopeKey, index);
+    }
+
+    const labeled = index.byLabel.get(task.name) || [];
+    const provider = index.unlabeledByType.get(task.definition.type) || [];
+    const matches = [
+      ...labeled.filter(({ definition }) =>
+        !definition.type || definition.type === task.definition.type
+      ),
+      ...provider.filter(({ definition }) => providerDefinitionMatches(definition, task))
+    ];
+    const match = matches.reduce(
+      (first, candidate) => !first || candidate.index < first.index ? candidate : first,
+      undefined
+    );
+
+    return match || { index: -1, definition: undefined };
+  };
+}
+
+function indexTaskDefinitions(definitions) {
+  const byLabel = new Map();
+  const unlabeledByType = new Map();
+
+  if (!Array.isArray(definitions)) {
+    return { byLabel, unlabeledByType };
   }
 
-  const folder = typeof task.scope === "object" ? task.scope : undefined;
-  const configuration = vscode.workspace
-    .getConfiguration("tasks", folder?.uri)
-    .inspect("tasks");
-  const definitions = folder
-    ? configuration?.workspaceFolderValue ?? configuration?.workspaceValue
-    : configuration?.workspaceValue;
+  definitions.forEach((definition, index) => {
+    if (!definition || typeof definition !== "object") return;
+    const entry = { index, definition };
 
-  const index = Array.isArray(definitions) ? definitions.findIndex(definition => {
-    if (!definition || typeof definition !== "object") return false;
-    if (definition.type && definition.type !== task.definition.type) return false;
-    if (definition.label) return definition.label === task.name;
+    if (definition.label) {
+      const entries = byLabel.get(definition.label) || [];
+      entries.push(entry);
+      byLabel.set(definition.label, entries);
+    } else if (definition.type) {
+      const entries = unlabeledByType.get(definition.type) || [];
+      entries.push(entry);
+      unlabeledByType.set(definition.type, entries);
+    }
+  });
 
-    // Provider tasks can be explicitly configured without a label.
-    const identityKeys = Object.keys(task.definition).filter(
-      key => key !== "type" && key !== "_key"
-    );
-    const configuredKeys = identityKeys.filter(key => key in definition);
-    return definition.type === task.definition.type && configuredKeys.length > 0 &&
-      configuredKeys.every(key =>
-        stableStringify(definition[key]) === stableStringify(task.definition[key])
-      );
-  }) : -1;
+  return { byLabel, unlabeledByType };
+}
 
-  return {
-    index,
-    definition: index >= 0 ? definitions[index] : undefined
-  };
+function providerDefinitionMatches(definition, task) {
+  const identityKeys = Object.keys(task.definition).filter(
+    key => key !== "type" && key !== "_key"
+  );
+  const configuredKeys = identityKeys.filter(key => key in definition);
+
+  return configuredKeys.length > 0 && configuredKeys.every(key =>
+    stableStringify(definition[key]) === stableStringify(task.definition[key])
+  );
 }
 
 function configuredTaskIcon(definition) {

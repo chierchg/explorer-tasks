@@ -534,6 +534,36 @@ test("only explicitly configured project tasks are listed", async () => {
   assert.equal(items[1].task.name, "npm: dev");
 });
 
+test("task definitions are indexed once per workspace scope", async () => {
+  const app = setup();
+  const folder = {
+    name: "folder",
+    uri: { toString: () => "file:///folder" }
+  };
+  let configurationReads = 0;
+  app.vscode.workspace.workspaceFolders = [folder];
+  app.vscode.workspace.getConfiguration = (section, uri) => {
+    if (section === "explorerTasks") {
+      return { get: (_, fallback) => fallback };
+    }
+    configurationReads += 1;
+    return { inspect: () => uri ? {
+      workspaceFolderValue: [{ label: "C" }, { label: "D" }]
+    } : {
+      workspaceValue: [{ label: "A" }, { label: "B" }]
+    } };
+  };
+  app.vscode.tasks.fetchTasks = async () => [
+    { ...task, name: "A" },
+    { ...task, name: "B" },
+    { ...task, name: "C", scope: folder },
+    { ...task, name: "D", scope: folder }
+  ];
+
+  assert.equal((await app.provider.getChildren()).length, 4);
+  assert.equal(configurationReads, 2);
+});
+
 test("no project configuration hides all tasks, including global configuration", async () => {
   const app = setup();
   app.vscode.workspace.getConfiguration = () => ({ inspect: () => ({ globalValue: [{ label: "watch" }] }) });

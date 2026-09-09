@@ -3,6 +3,11 @@
 ## Unreleased
 
 - Locate task definitions structurally so Modify, Hide, and Unhide do not target comments, references, or a different task with the same label.
+- Index task definitions once per workspace scope to avoid repeated configuration scans during view refreshes.
+
+## 0.5.1
+
+- Tighten the README description.
 
 ## 0.5.0
 
