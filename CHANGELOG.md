@@ -4,6 +4,7 @@
 
 - Locate task definitions structurally so Modify, Hide, and Unhide do not target comments, references, or a different task with the same label.
 - Index task definitions once per workspace scope to avoid repeated configuration scans during view refreshes.
+- Coalesce configuration and file event bursts, and share concurrent task-list loads.
 
 ## 0.5.1
 

@@ -15,6 +15,10 @@ class TasksProvider {
     this.onDidChangeTreeData = this._onDidChangeTreeData.event;
 
     this.runningTasks = new Map();
+    this.loadPromise = undefined;
+    this.refreshPending = false;
+    this.refreshTimer = undefined;
+    this.disposed = false;
 
     // Pick up tasks that were already running before
     // this view/extension was activated.
@@ -24,10 +28,35 @@ class TasksProvider {
   }
 
   refresh() {
+    if (this.disposed) return;
+
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+
+    if (this.loadPromise) {
+      this.refreshPending = true;
+      return;
+    }
+
     this._onDidChangeTreeData.fire();
   }
 
+  scheduleRefresh() {
+    if (this.disposed || this.refreshTimer) return;
+
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      this.refresh();
+    }, 25);
+  }
+
   dispose() {
+    this.disposed = true;
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = undefined;
+    this.refreshPending = false;
     this._onDidChangeTreeData.dispose();
     this.runningTasks.clear();
   }
@@ -37,6 +66,26 @@ class TasksProvider {
       return element.children || [];
     }
 
+    if (this.loadPromise) return this.loadPromise;
+
+    const loadPromise = this.loadRootChildren();
+    this.loadPromise = loadPromise;
+
+    try {
+      return await loadPromise;
+    } finally {
+      if (this.loadPromise === loadPromise) {
+        this.loadPromise = undefined;
+
+        if (this.refreshPending) {
+          this.refreshPending = false;
+          this.refresh();
+        }
+      }
+    }
+  }
+
+  async loadRootChildren() {
     try {
       const tasks = await vscode.tasks.fetchTasks();
       const matchProjectTask = createProjectTaskMatcher();
@@ -413,7 +462,7 @@ function activate(context) {
 
   const workspaceListener =
     vscode.workspace.onDidChangeWorkspaceFolders(
-      () => provider.refresh()
+      () => provider.scheduleRefresh()
     );
 
   const configurationListener =
@@ -423,7 +472,7 @@ function activate(context) {
         event.affectsConfiguration("explorerTasks.grouping.expanded") ||
         event.affectsConfiguration("explorerTasks.viewMode")
       ) {
-        provider.refresh();
+        provider.scheduleRefresh();
       }
     });
 
@@ -433,15 +482,15 @@ function activate(context) {
     );
 
   taskWatcher.onDidCreate(
-    () => provider.refresh()
+    () => provider.scheduleRefresh()
   );
 
   taskWatcher.onDidChange(
-    () => provider.refresh()
+    () => provider.scheduleRefresh()
   );
 
   taskWatcher.onDidDelete(
-    () => provider.refresh()
+    () => provider.scheduleRefresh()
   );
 
   context.subscriptions.push(

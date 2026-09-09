@@ -172,7 +172,10 @@ function setup(initial = []) {
   const contexts = new Map();
   const workspaceValues = new Map();
   const explorerSettings = { "grouping.expanded": true, viewMode: "tree" };
-  let provider, decorationProvider, start, end;
+  const taskWatcherCallbacks = {};
+  const timers = new Map();
+  let nextTimerId = 0;
+  let provider, decorationProvider, start, end, configurationChanged, workspaceFoldersChanged;
   const disposable = () => ({ disposed: false, dispose() { this.disposed = true; } });
   const vscode = {
     TaskScope: { Global: 1, Workspace: 2 },
@@ -249,12 +252,26 @@ function setup(initial = []) {
         documentText = edit.replacement.text;
         return true;
       },
-      onDidChangeConfiguration: () => disposable(),
-      onDidChangeWorkspaceFolders: () => disposable(),
-      createFileSystemWatcher: () => ({ ...disposable(), onDidCreate() {}, onDidChange() {}, onDidDelete() {} })
+      onDidChangeConfiguration: callback => { configurationChanged = callback; return disposable(); },
+      onDidChangeWorkspaceFolders: callback => { workspaceFoldersChanged = callback; return disposable(); },
+      createFileSystemWatcher: () => ({
+        ...disposable(),
+        onDidCreate(callback) { taskWatcherCallbacks.create = callback; },
+        onDidChange(callback) { taskWatcherCallbacks.change = callback; },
+        onDidDelete(callback) { taskWatcherCallbacks.delete = callback; }
+      })
     }
   };
-  const sandbox = { require: name => name === "vscode" ? vscode : require(name), module: { exports: {} } };
+  const sandbox = {
+    require: name => name === "vscode" ? vscode : require(name),
+    module: { exports: {} },
+    setTimeout: callback => {
+      const id = ++nextTimerId;
+      timers.set(id, callback);
+      return id;
+    },
+    clearTimeout: id => timers.delete(id)
+  };
   vm.runInNewContext(source, sandbox);
   sandbox.module.exports.activate({
     subscriptions,
@@ -265,6 +282,8 @@ function setup(initial = []) {
     }
   });
   return { provider, decorationProvider, vscode, commands, contexts, editor, errors, emitters, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, openedDocuments, subscriptions, treeView, uiCommands,
+    changeConfiguration: event => configurationChanged(event), changeTaskFile: () => taskWatcherCallbacks.change(), changeWorkspaceFolders: () => workspaceFoldersChanged(),
+    runTimers: () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); },
     start: value => start({ execution: value }), end: value => end({ execution: value }) };
 }
 
@@ -301,6 +320,66 @@ test("a task finishing before executeTask resolves stays stopped", async () => {
   };
   await app.commands.get("explorerTasks.runTask")((await app.provider.getChildren())[0]);
   assert.equal((await app.provider.getChildren())[0].running, false);
+});
+
+test("concurrent root requests share one task load", async () => {
+  const app = setup();
+  let fetchCount = 0;
+  let resolveFetch;
+  app.vscode.tasks.fetchTasks = () => {
+    fetchCount += 1;
+    return new Promise(resolve => { resolveFetch = resolve; });
+  };
+
+  const first = app.provider.getChildren();
+  const second = app.provider.getChildren();
+  assert.equal(fetchCount, 1);
+  resolveFetch([task]);
+
+  const [firstItems, secondItems] = await Promise.all([first, second]);
+  assert.equal(firstItems[0].label, "watch");
+  assert.equal(secondItems[0].label, "watch");
+});
+
+test("a refresh during a task load runs once after the load completes", async () => {
+  const app = setup();
+  let resolveFetch;
+  app.vscode.tasks.fetchTasks = () => new Promise(resolve => { resolveFetch = resolve; });
+  let refreshCount = 0;
+  app.provider.onDidChangeTreeData(() => { refreshCount += 1; });
+
+  const loading = app.provider.getChildren();
+  app.provider.refresh();
+  app.provider.refresh();
+  assert.equal(refreshCount, 0);
+  resolveFetch([task]);
+  await loading;
+  assert.equal(refreshCount, 1);
+});
+
+test("file and configuration event bursts are coalesced", () => {
+  const app = setup();
+  let refreshCount = 0;
+  app.provider.onDidChangeTreeData(() => { refreshCount += 1; });
+
+  app.changeTaskFile();
+  app.changeConfiguration({ affectsConfiguration: key => key === "tasks" });
+  app.changeWorkspaceFolders();
+  assert.equal(refreshCount, 0);
+  app.runTimers();
+  assert.equal(refreshCount, 1);
+});
+
+test("task lifecycle refreshes remain immediate", () => {
+  const app = setup();
+  let refreshCount = 0;
+  app.provider.onDidChangeTreeData(() => { refreshCount += 1; });
+
+  app.changeTaskFile();
+  app.start(execution());
+  assert.equal(refreshCount, 1);
+  app.runTimers();
+  assert.equal(refreshCount, 1);
 });
 
 test("Run delegates to VS Code and start events update the view", async () => {
