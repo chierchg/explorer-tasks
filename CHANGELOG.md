@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Locate task definitions structurally so Modify, Hide, and Unhide do not target comments, references, or a different task with the same label.
+
 ## 0.5.0
 
 - Respect `hide` in task definitions.

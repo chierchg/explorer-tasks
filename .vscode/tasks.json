@@ -12,6 +12,7 @@
         "cwd": "${workspaceFolder}"
       },
       "group": "test",
+      //"dependsOn": ["-- Tests -- / Quick success"]
     },
     {
       "label": "Release / 1. Increase version",

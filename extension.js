@@ -1,5 +1,11 @@
 const vscode = require("vscode");
-const { applyEdits, modify, parse } = require("jsonc-parser");
+const {
+  applyEdits,
+  findNodeAtLocation,
+  modify,
+  parse,
+  parseTree
+} = require("jsonc-parser");
 
 class TasksProvider {
   constructor(workspaceState) {
@@ -476,12 +482,15 @@ async function openTaskDefinition(task) {
     const document = await vscode.workspace.openTextDocument(uri);
     const editor = await vscode.window.showTextDocument(document);
     const text = document.getText();
-    const label = JSON.stringify(task.name);
-    const offset = text.indexOf(label);
+    const match = findTaskDefinition(text, task);
+    const labelNode = findNodeAtLocation(
+      match.tree,
+      [...match.path, "label"]
+    );
 
-    if (offset >= 0) {
-      const start = document.positionAt(offset);
-      const end = document.positionAt(offset + label.length);
+    if (labelNode) {
+      const start = document.positionAt(labelNode.offset);
+      const end = document.positionAt(labelNode.offset + labelNode.length);
       const range = new vscode.Range(start, end);
       editor.selection = new vscode.Selection(start, start);
       editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
@@ -512,20 +521,11 @@ async function setTaskHidden(task, hidden) {
   try {
     const document = await vscode.workspace.openTextDocument(uri);
     const text = document.getText();
-    const root = parse(text);
-    const candidates = [
-      { path: ["tasks"], tasks: root?.tasks },
-      { path: ["tasks", "tasks"], tasks: root?.tasks?.tasks },
-      { path: ["settings", "tasks", "tasks"], tasks: root?.settings?.tasks?.tasks }
-    ];
-    const candidate = candidates.find(({ tasks }) => Array.isArray(tasks) &&
-      tasks.some(definition => definition?.label === task.name));
-    const index = candidate?.tasks.findIndex(definition => definition?.label === task.name) ?? -1;
-    if (!candidate || index < 0) throw new Error(`Definition for "${task.name}" was not found`);
+    const match = findTaskDefinition(text, task);
 
     const edits = modify(
       text,
-      [...candidate.path, index, "hide"],
+      [...match.path, "hide"],
       hidden ? true : undefined,
       { formattingOptions: { insertSpaces: true, tabSize: 2 } }
     );
@@ -544,6 +544,43 @@ async function setTaskHidden(task, hidden) {
       `Could not ${hidden ? "hide" : "unhide"} "${task.name}": ${error.message || error}`
     );
   }
+}
+
+function findTaskDefinition(text, task) {
+  const errors = [];
+  const tree = parseTree(text, errors);
+  const root = parse(text);
+
+  if (!tree || errors.length > 0) {
+    throw new Error("The task configuration contains invalid JSONC");
+  }
+
+  const candidates = [
+    { path: ["tasks"], tasks: root?.tasks },
+    { path: ["tasks", "tasks"], tasks: root?.tasks?.tasks },
+    { path: ["settings", "tasks", "tasks"], tasks: root?.settings?.tasks?.tasks }
+  ];
+  const matches = [];
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate.tasks)) continue;
+
+    candidate.tasks.forEach((definition, index) => {
+      if (definition?.label !== task.name) return;
+      if (definition.type && definition.type !== task.definition?.type) return;
+      matches.push({ tree, path: [...candidate.path, index] });
+    });
+  }
+
+  if (matches.length === 0) {
+    throw new Error(`Definition for "${task.name}" was not found`);
+  }
+
+  if (matches.length > 1) {
+    throw new Error(`Multiple definitions match "${task.name}"`);
+  }
+
+  return matches[0];
 }
 
 function scopeOrder(task) {

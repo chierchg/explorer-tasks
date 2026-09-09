@@ -11,7 +11,12 @@
         "-e",
         "console.log('Explorer Tasks: quick task completed successfully')"
       ],
-      "problemMatcher": []
+      "problemMatcher": [],
+      "dependsOn": [
+        "More Tests / Expected failure",
+        "More Tests / Concurrent long-running",
+        "More Tests / Nested / Labels: path/to/file"
+      ]
     },
     {
       "label": "More Tests / Expected failure",

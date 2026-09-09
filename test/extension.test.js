@@ -264,7 +264,7 @@ function setup(initial = []) {
       update: async (key, value) => workspaceValues.set(key, value)
     }
   });
-  return { provider, decorationProvider, vscode, commands, contexts, editor, errors, emitters, getDocumentText: () => documentText, openedDocuments, subscriptions, treeView, uiCommands,
+  return { provider, decorationProvider, vscode, commands, contexts, editor, errors, emitters, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, openedDocuments, subscriptions, treeView, uiCommands,
     start: value => start({ execution: value }), end: value => end({ execution: value }) };
 }
 
@@ -354,6 +354,61 @@ test("Modify opens and reveals the task definition without selecting text", asyn
   assert.equal(app.openedDocuments[0], "file:///workspace/.vscode/tasks.json");
   assert.equal(app.editor.selection.start, 19);
   assert.equal(app.editor.selection.end, 19);
+});
+
+test("Modify reveals the definition instead of an earlier label reference", async () => {
+  const app = setup();
+  const text = `{
+  // "Build" is also mentioned in this comment.
+  "tasks": [
+    { "label": "Test", "dependsOn": "Build" },
+    { "label": "Build", "type": "shell" }
+  ]
+}`;
+  app.setDocumentText(text);
+
+  await app.commands.get("explorerTasks.modifyTask")({
+    task: { ...task, name: "Build", scope: { uri: "file:///workspace" } }
+  });
+
+  assert.equal(app.editor.selection.start, text.lastIndexOf('"Build"'));
+  assert.equal(app.editor.selection.end, text.lastIndexOf('"Build"'));
+});
+
+test("Hide uses task type to select the matching definition", async () => {
+  const app = setup();
+  app.setDocumentText(`{
+  "tasks": [
+    { "label": "Build", "type": "npm" },
+    { "label": "Build", "type": "shell" }
+  ]
+}`);
+
+  await app.commands.get("explorerTasks.hideTask")({
+    task: { ...task, name: "Build", scope: { uri: "file:///workspace" } }
+  });
+
+  const definitions = JSON.parse(app.getDocumentText()).tasks;
+  assert.equal(definitions[0].hide, undefined);
+  assert.equal(definitions[1].hide, true);
+});
+
+test("Hide refuses to edit an ambiguous duplicate definition", async () => {
+  const app = setup();
+  const text = `{
+  "tasks": [
+    { "label": "Build", "type": "shell" },
+    { "label": "Build", "type": "shell" }
+  ]
+}`;
+  app.setDocumentText(text);
+
+  await app.commands.get("explorerTasks.hideTask")({
+    task: { ...task, name: "Build", scope: { uri: "file:///workspace" } }
+  });
+
+  assert.equal(app.getDocumentText(), text);
+  assert.match(app.errors[0], /Multiple definitions match/);
 });
 
 test("group expansion can be toggled from its command", async () => {
