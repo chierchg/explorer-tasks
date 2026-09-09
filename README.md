@@ -15,6 +15,8 @@ Run tasks directly from the Explorer tab.
 - Click the Edit action to open its definition in `tasks.json`.
 - Click the Hide action to exclude a task from the view.
 - Click the Unhide action to reveal a hidden task.
+- If a running task is renamed or removed, its original label remains visible
+  with a Stop action until that execution ends.
 
 *Note:* Hide action adds `"hide": true` to the task definition in `tasks.json`. Unhide action removes it. In addition to the UI actions, you can manually add or remove this property to hide or unhide a task.
 

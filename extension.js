@@ -20,6 +20,8 @@ class TasksProvider {
     this.refreshTimer = undefined;
     this.disposed = false;
     this.contextValues = new Map();
+    this.currentProjectTaskKeys = new Set();
+    this.trackedRunningTaskKeys = new Set();
 
     // Pick up tasks that were already running before
     // this view/extension was activated.
@@ -61,6 +63,8 @@ class TasksProvider {
     this._onDidChangeTreeData.dispose();
     this.runningTasks.clear();
     this.contextValues.clear();
+    this.currentProjectTaskKeys.clear();
+    this.trackedRunningTaskKeys.clear();
   }
 
   async getChildren(element) {
@@ -97,6 +101,11 @@ class TasksProvider {
         .map(task => ({ task, key: taskKey(task), ...matchProjectTask(task) }))
         .filter(entry => entry.index >= 0)
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
+      this.currentProjectTaskKeys = new Set(ordered.map(({ key }) => key));
+
+      for (const key of this.currentProjectTaskKeys) {
+        if (executionsByTask.has(key)) this.trackedRunningTaskKeys.add(key);
+      }
 
       const hasHiddenTasks = ordered.some(({ definition }) => definition?.hide === true);
       const displayed = this.showHidden
@@ -125,10 +134,32 @@ class TasksProvider {
           definition?.hide === true
         );
       });
+      const orphanItems = [];
+
+      for (const key of this.trackedRunningTaskKeys) {
+        if (this.currentProjectTaskKeys.has(key)) continue;
+
+        const executions = executionsByTask.get(key);
+        const execution = executions?.values().next().value;
+
+        if (!execution) {
+          this.trackedRunningTaskKeys.delete(key);
+          continue;
+        }
+
+        orphanItems.push(new TaskItem(
+          execution.task,
+          key,
+          true,
+          undefined,
+          false,
+          true
+        ));
+      }
 
       return mode === "flat"
-        ? items
-        : buildTree(items, groupsExpanded);
+        ? [...items, ...orphanItems]
+        : [...buildTree(items, groupsExpanded), ...orphanItems];
     } catch (error) {
       vscode.window.showErrorMessage(
         `Could not load tasks: ${error.message || error}`
@@ -152,6 +183,9 @@ class TasksProvider {
     }
 
     executions.add(execution);
+    if (this.currentProjectTaskKeys.has(key)) {
+      this.trackedRunningTaskKeys.add(key);
+    }
 
     this.refresh();
   }
@@ -165,6 +199,7 @@ class TasksProvider {
 
       if (executions.size === 0) {
         this.runningTasks.delete(key);
+        this.trackedRunningTaskKeys.delete(key);
       }
     }
 
@@ -224,7 +259,7 @@ class TasksProvider {
 }
 
 class TaskItem extends vscode.TreeItem {
-  constructor(task, key, running, icon, hidden) {
+  constructor(task, key, running, icon, hidden, orphan = false) {
     super(
       task.name,
       vscode.TreeItemCollapsibleState.None
@@ -235,14 +270,21 @@ class TaskItem extends vscode.TreeItem {
     this.running = running;
 
     this.hidden = hidden;
+    this.orphan = orphan;
     const hiddenColor = hidden
       ? new vscode.ThemeColor("list.deemphasizedForeground")
       : undefined;
-    this.contextValue = hidden
-      ? (running ? "explorerTaskHiddenRunning" : "explorerTaskHidden")
-      : (running ? "explorerTaskRunning" : "explorerTask");
+    this.contextValue = orphan
+      ? "explorerTaskOrphanRunning"
+      : hidden
+        ? (running ? "explorerTaskHiddenRunning" : "explorerTaskHidden")
+        : (running ? "explorerTaskRunning" : "explorerTask");
 
-    if (hidden) this.description = "Hidden";
+    if (orphan) {
+      this.description = "Running · no matching definition";
+    } else if (hidden) {
+      this.description = "Hidden";
+    }
     if (hidden) {
       this.resourceUri = vscode.Uri.parse(
         `explorer-task-hidden:/${encodeURIComponent(key)}`
@@ -280,7 +322,11 @@ class TaskItem extends vscode.TreeItem {
       );
     }
 
-    if (running) {
+    if (orphan) {
+      this.tooltip.appendMarkdown(
+        `$(debug-stop) Running — the task definition changed or was removed; use the Stop action to terminate`
+      );
+    } else if (running) {
       this.tooltip.appendMarkdown(
         `$(debug-stop) Running — use the Stop action to terminate`
       );

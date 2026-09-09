@@ -243,7 +243,7 @@
         },
         {
           "command": "explorerTasks.stopTask",
-          "when": "view == explorerTasks.tasksView && (viewItem == explorerTaskRunning || viewItem == explorerTaskHiddenRunning)",
+          "when": "view == explorerTasks.tasksView && (viewItem == explorerTaskRunning || viewItem == explorerTaskHiddenRunning || viewItem == explorerTaskOrphanRunning)",
           "group": "inline@1"
         },
         {

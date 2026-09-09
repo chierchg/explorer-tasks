@@ -6,6 +6,7 @@
 - Index task definitions once per workspace scope to avoid repeated configuration scans during view refreshes.
 - Coalesce configuration and file event bursts, and share concurrent task-list loads.
 - Snapshot running executions once per refresh and avoid resending unchanged view contexts.
+- Keep renamed or removed running tasks visible and stoppable until their executions end.
 
 ## 0.5.1
 

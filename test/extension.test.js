@@ -109,6 +109,90 @@ test("a hidden task remains visible until its final execution stops", async () =
   assert.equal((await app.provider.getChildren()).length, 0);
 });
 
+test("a renamed running task remains available as an orphan until it stops", async () => {
+  const active = execution();
+  const app = setup([active]);
+  await app.provider.getChildren();
+
+  const renamed = { ...task, name: "renamed" };
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [{ label: "renamed", type: "shell" }] }) };
+  app.vscode.tasks.fetchTasks = async () => [renamed];
+
+  let items = await app.provider.getChildren();
+  assert.equal(items.map(item => item.label).join("|"), "renamed|watch");
+  assert.equal(items[0].running, false);
+  assert.equal(items[1].contextValue, "explorerTaskOrphanRunning");
+  assert.equal(items[1].description, "Running · no matching definition");
+  assert.match(items[1].tooltip.value, /definition changed or was removed/);
+  await app.commands.get("explorerTasks.stopTask")(items[1]);
+  assert.equal(active.terminated, true);
+
+  app.end(active);
+  app.vscode.tasks.taskExecutions = [];
+  items = await app.provider.getChildren();
+  assert.equal(items.map(item => item.label).join("|"), "renamed");
+});
+
+test("a removed running task remains available at the root", async () => {
+  const groupedTask = { ...task, name: "Build / watch" };
+  const active = execution(groupedTask);
+  const app = setup([active]);
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [{ label: groupedTask.name, type: "shell" }] }) };
+  app.vscode.tasks.fetchTasks = async () => [groupedTask];
+  await app.provider.getChildren();
+
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [] }) };
+  app.vscode.tasks.fetchTasks = async () => [];
+  const [orphan] = await app.provider.getChildren();
+  assert.equal(orphan.label, groupedTask.name);
+  assert.equal(orphan.contextValue, "explorerTaskOrphanRunning");
+});
+
+test("unrelated running tasks are not shown as orphans", async () => {
+  const app = setup([execution({ ...task, name: "unrelated" })]);
+  const items = await app.provider.getChildren();
+  assert.equal(items.map(item => item.label).join("|"), "watch");
+  assert.equal(items[0].running, false);
+});
+
+test("a same-label replacement retains the label identity", async () => {
+  const active = execution();
+  const app = setup([active]);
+  await app.provider.getChildren();
+
+  const replacement = { ...task, detail: "replacement definition" };
+  app.vscode.tasks.fetchTasks = async () => [replacement];
+  const items = await app.provider.getChildren();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].task, replacement);
+  assert.equal(items[0].running, true);
+  assert.equal(items[0].contextValue, "explorerTaskRunning");
+});
+
+test("reordering tasks does not affect running identity", async () => {
+  const tasks = ["A", "B"].map(name => ({ ...task, name }));
+  const active = execution(tasks[0]);
+  const app = setup([active]);
+  let definitions = tasks.map(({ name }) => ({ label: name, type: "shell" }));
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: definitions }) };
+  app.vscode.tasks.fetchTasks = async () => tasks;
+  await app.provider.getChildren();
+
+  definitions = [...definitions].reverse();
+  const items = await app.provider.getChildren();
+  assert.equal(items.map(item => item.label).join("|"), "B|A");
+  assert.equal(items[1].running, true);
+  assert.equal(items.some(item => item.orphan), false);
+});
+
 test("Hide and Unhide safely edit the matched JSONC task property", async () => {
   const app = setup();
   const item = { task: { ...task, scope: { uri: "file:///workspace" } } };
@@ -618,6 +702,12 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
   assert(!itemMenus.find(entry => entry.command === "explorerTasks.runTask").group.startsWith("inline"));
   assert(itemMenus.find(entry => entry.command === "explorerTasks.stopTask").group.startsWith("inline"));
   assert(itemMenus.find(entry => entry.command === "explorerTasks.modifyTask").group.startsWith("inline"));
+  assert.deepEqual(
+    itemMenus
+      .filter(entry => entry.when.includes("explorerTaskOrphanRunning"))
+      .map(entry => entry.command),
+    ["explorerTasks.stopTask"]
+  );
   assert(!manifest.contributes.menus.commandPalette.some(entry => entry.command === "explorerTasks.refresh"));
   const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]));
   assert.equal(commands.get("explorerTasks.expandGroups").icon, "$(expand-all)");
