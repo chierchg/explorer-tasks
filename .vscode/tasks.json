@@ -47,45 +47,6 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
-    },
-    {
-      "label": "-- Tests -- / Quick success",
-      "type": "process",
-      "command": "node",
-      "args": [
-        "-e",
-        "console.log('Explorer Tasks: quick task completed successfully')"
-      ],
-    },
-    {
-      "label": "-- Tests -- / Expected failure",
-      "type": "process",
-      "command": "node",
-      "args": [
-        "-e",
-        "console.error('Explorer Tasks: intentional test failure'); process.exit(1)"
-      ],
-    },
-    {
-      "label": "-- Tests -- / Concurrent long-running",
-      "type": "process",
-      "command": "node",
-      "args": [
-        "-e",
-        "console.log('Explorer Tasks: running until stopped'); setInterval(() => {}, 1000)"
-      ],
-      "runOptions": {
-        "instanceLimit": 3
-      },
-    },
-    {
-      "label": "-- Tests -- / Nested / Labels: path/to/file",
-      "type": "process",
-      "command": "node",
-      "args": [
-        "-e",
-        "console.log('Explorer Tasks: nested grouping and literal label characters work')"
-      ],
     }
   ],
   "inputs": [
