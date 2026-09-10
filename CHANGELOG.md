@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+- Add image to README to illustrate the extension's features.
+
 ## 0.5.2
 
 - Locate task definitions structurally so Modify, Hide, and Unhide do not target comments, references, or a different task with the same label.

@@ -1,5 +1,7 @@
 # Explorer Tasks
 
+<img src="./media/explorer-tasks.png" width="550" alt="Project tasks directly in the VS Code Explorer"/>
+
 Run tasks directly from the Explorer tab. 
 
 - Show tasks defined in `tasks.json` in their original order.
