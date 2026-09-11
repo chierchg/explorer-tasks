@@ -28,11 +28,12 @@
     },
     {
       "label": "Release / 3. Push release",
-      "detail": "Pushes the current branch and its annotated version tags to origin.",
+      "detail": "Pushes the current branch and its annotated version tags to origin, establishing the upstream branch when needed.",
       "type": "process",
       "command": "git",
       "args": [
         "push",
+        "--set-upstream",
         "origin",
         "HEAD",
         "--follow-tags"
