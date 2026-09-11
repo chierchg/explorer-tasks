@@ -5,6 +5,7 @@
 - Require task labels to be unique within each workspace scope, reporting and displaying duplicated labels as disabled warning rows.
 - Add an empty-state action that opens or creates `tasks.json`.
 - Add a one-click toolbar action that inserts a uniquely named shell task and opens it for editing.
+- Add an `Add Input…` menu action for inserting `promptString` and `pickString` templates.
 
 ## 0.5.3
 

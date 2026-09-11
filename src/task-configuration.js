@@ -66,11 +66,22 @@ function parseTaskConfiguration(text, errors = []) {
 }
 
 function revealTaskDefinition(vscode, document, editor, match) {
-  const labelNode = findNodeAtLocation(match.tree, [...match.path, "label"]);
-  if (!labelNode) return;
+  revealConfigurationNode(vscode, document, editor, match.tree, [...match.path, "label"]);
+}
 
-  const start = document.positionAt(labelNode.offset);
-  const end = document.positionAt(labelNode.offset + labelNode.length);
+function revealConfigurationPath(vscode, document, editor, path) {
+  const errors = [];
+  const tree = parseTree(document.getText(), errors, JSONC_PARSE_OPTIONS);
+  if (!tree || errors.length > 0) return;
+  revealConfigurationNode(vscode, document, editor, tree, path);
+}
+
+function revealConfigurationNode(vscode, document, editor, tree, path) {
+  const node = findNodeAtLocation(tree, path);
+  if (!node) return;
+
+  const start = document.positionAt(node.offset);
+  const end = document.positionAt(node.offset + node.length);
   const range = new vscode.Range(start, end);
   editor.selection = new vscode.Selection(start, start);
   editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
@@ -80,5 +91,6 @@ module.exports = {
   STARTER_TASK_CONFIGURATION,
   findTaskDefinition,
   parseTaskConfiguration,
+  revealConfigurationPath,
   revealTaskDefinition
 };
