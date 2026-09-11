@@ -7,6 +7,7 @@ const {
   STARTER_TASK_CONFIGURATION,
   findTaskDefinition,
   parseTaskConfiguration,
+  revealConfigurationPath,
   revealTaskDefinition
 } = require("./task-configuration");
 const {
@@ -509,6 +510,11 @@ function activate(context) {
     }
   );
 
+  const addInputCommand = vscode.commands.registerCommand(
+    "explorerTasks.addInput",
+    addInput
+  );
+
   const hideTaskCommand = vscode.commands.registerCommand(
     "explorerTasks.hideTask",
     item => setTaskHidden(item?.task, true)
@@ -644,6 +650,7 @@ function activate(context) {
     modifyTaskCommand,
     openTaskConfigurationCommand,
     addTaskCommand,
+    addInputCommand,
     hideTaskCommand,
     unhideTaskCommand,
     showHiddenTasksCommand,
@@ -663,6 +670,120 @@ function activate(context) {
 }
 
 function deactivate() {}
+
+async function addInput() {
+  const choice = await vscode.window.showQuickPick([
+    { label: "Prompt string", inputType: "promptString" },
+    { label: "Pick string", inputType: "pickString" }
+  ], { placeHolder: "Select an input type" });
+  if (!choice) return;
+
+  const uri = projectTaskConfigurationUri();
+  if (!uri) {
+    vscode.window.showErrorMessage("Open a folder or workspace before adding an input.");
+    return;
+  }
+
+  try {
+    let exists = true;
+    try {
+      await vscode.workspace.fs.stat(uri);
+    } catch {
+      exists = false;
+    }
+
+    if (!exists && !vscode.workspace.workspaceFile && vscode.workspace.workspaceFolders?.[0]) {
+      await vscode.workspace.fs.createDirectory(
+        vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, ".vscode")
+      );
+    }
+
+    const document = exists ? await vscode.workspace.openTextDocument(uri) : undefined;
+    const text = document?.getText() || "";
+    const errors = [];
+    const root = text ? parseTaskConfiguration(text, errors) : undefined;
+    if (errors.length > 0 || (root !== undefined && (!root || typeof root !== "object" || Array.isArray(root)))) {
+      throw new Error("The task configuration contains invalid JSONC");
+    }
+
+    let path;
+    let inputs;
+    let createContainer = false;
+    if (Array.isArray(root?.tasks)) {
+      path = ["inputs"];
+      inputs = Array.isArray(root.inputs) ? root.inputs : [];
+    } else if (root?.tasks && typeof root.tasks === "object") {
+      path = ["tasks", "inputs"];
+      inputs = Array.isArray(root.tasks.inputs) ? root.tasks.inputs : [];
+    } else if (root?.settings?.tasks && typeof root.settings.tasks === "object") {
+      path = ["settings", "tasks", "inputs"];
+      inputs = Array.isArray(root.settings.tasks.inputs) ? root.settings.tasks.inputs : [];
+    } else {
+      path = vscode.workspace.workspaceFile ? ["tasks"] : ["inputs"];
+      inputs = [];
+      createContainer = Boolean(vscode.workspace.workspaceFile);
+    }
+
+    const ids = new Set(inputs.map(input => input?.id));
+    let id = "newInput";
+    for (let suffix = 2; ids.has(id); suffix += 1) id = `newInput${suffix}`;
+
+    const input = choice.inputType === "pickString"
+      ? {
+          id,
+          type: "pickString",
+          description: "Select a value",
+          options: ["Option 1", "Option 2"],
+          default: "Option 1"
+        }
+      : {
+          id,
+          type: "promptString",
+          description: "Enter a value",
+          default: ""
+        };
+
+    let updated;
+    let inputPath;
+    if (!exists) {
+      updated = JSON.stringify({ version: "2.0.0", tasks: [], inputs: [input] }, null, 2) + "\n";
+      inputPath = ["inputs", 0, "id"];
+      const edit = new vscode.WorkspaceEdit();
+      edit.createFile(uri);
+      edit.insert(uri, new vscode.Position(0, 0), updated);
+      if (!await vscode.workspace.applyEdit(edit)) {
+        throw new Error("The task configuration could not be created");
+      }
+    } else {
+      const targetPath = inputs.length > 0 ? [...path, inputs.length] : path;
+      const value = inputs.length > 0
+        ? input
+        : createContainer
+          ? { version: "2.0.0", tasks: [], inputs: [input] }
+          : [input];
+      updated = applyEdits(text, modify(text, targetPath, value, {
+        formattingOptions: { insertSpaces: true, tabSize: 2 }
+      }));
+      inputPath = inputs.length > 0
+        ? [...path, inputs.length, "id"]
+        : createContainer
+          ? ["tasks", "inputs", 0, "id"]
+          : [...path, 0, "id"];
+      const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(uri, fullRange, updated);
+      if (!await vscode.workspace.applyEdit(edit) || !await document.save()) {
+        throw new Error("The task configuration could not be saved");
+      }
+    }
+
+    const updatedDocument = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(updatedDocument);
+    revealConfigurationPath(vscode, updatedDocument, editor, inputPath);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Could not add an input: ${error.message || error}`);
+  }
+}
 
 async function addTask() {
   const uri = projectTaskConfigurationUri();

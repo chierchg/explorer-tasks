@@ -321,6 +321,7 @@ function setup(initial = []) {
     window: {
       createTreeView: (_, options) => { provider = options.treeDataProvider; return treeView; },
       registerFileDecorationProvider: value => { decorationProvider = value; return disposable(); },
+           showQuickPick: async items => items[0],
       showTextDocument: async () => editor,
       showErrorMessage: message => errors.push(message)
     },
@@ -840,6 +841,43 @@ test("Add Task creates a workspace task container in a code-workspace file", asy
   assert.equal(root.tasks.tasks[0].label, "New task");
 });
 
+test("Add Input inserts a uniquely identified promptString template", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
+  app.setDocumentText(`{
+  "version": "2.0.0",
+  "tasks": [],
+  "inputs": [{ "id": "newInput", "type": "promptString" }]
+}`);
+
+  await app.commands.get("explorerTasks.addInput")();
+  const root = require("jsonc-parser").parse(app.getDocumentText());
+  assert.deepEqual(root.inputs[1], {
+    id: "newInput2",
+    type: "promptString",
+    description: "Enter a value",
+    default: ""
+  });
+  assert.notEqual(app.editor.selection, undefined);
+});
+
+test("Add Input inserts a pickString template selected from the picker", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
+  app.setDocumentText('{"version":"2.0.0","tasks":[]}');
+  app.vscode.window.showQuickPick = async items => items[1];
+
+  await app.commands.get("explorerTasks.addInput")();
+  const [input] = require("jsonc-parser").parse(app.getDocumentText()).inputs;
+  assert.deepEqual(input, {
+    id: "newInput",
+    type: "pickString",
+    description: "Select a value",
+    options: ["Option 1", "Option 2"],
+    default: "Option 1"
+  });
+});
+
 test("definition property order does not change task identity", async () => {
   const app = setup();
   app.vscode.tasks.fetchTasks = async () => [{ ...task, definition: { type: "npm", script: "dev" } }];
@@ -901,6 +939,11 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
   assert.equal(commands.get("explorerTasks.showFlatView").icon, "$(list-flat)");
   assert.equal(commands.get("explorerTasks.showTreeView").icon, "$(list-tree)");
   assert.equal(commands.get("explorerTasks.addTask").icon, "$(add)");
+  assert.equal(commands.get("explorerTasks.addInput").title, "Add Input…");
+  assert(manifest.contributes.menus["view/title"].some(entry =>
+    entry.command === "explorerTasks.addInput" &&
+      entry.group === "configuration@1"
+  ));
   assert(manifest.contributes.menus["view/title"].some(entry =>
     entry.command === "explorerTasks.addTask" &&
       entry.when === "view == explorerTasks.tasksView" &&

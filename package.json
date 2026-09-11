@@ -83,6 +83,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "explorerTasks.addInput",
+        "title": "Add Input…",
+        "category": "Explorer Tasks"
+      },
+      {
         "command": "explorerTasks.duplicateLabelWarning",
         "title": "Duplicate label",
         "category": "Explorer Tasks",
@@ -236,6 +241,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "explorerTasks.addInput",
+          "when": "view == explorerTasks.tasksView",
+          "group": "configuration@1"
+        },
         {
           "command": "explorerTasks.addTask",
           "when": "view == explorerTasks.tasksView",

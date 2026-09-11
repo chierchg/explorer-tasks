@@ -35,6 +35,7 @@ See the [VS Code Tasks guide](https://code.visualstudio.com/docs/editor/tasks) f
 
 - Create a new `.vscode/tasks.json` file if none exists.
 - Add a shell task with a unique label and a placeholder command.
+- Add an input template from the `…` menu.
 - Reload the task list manually.
 - Switch between Flat View and Tree View when groups exist.
 - Expand or Collapse groups in Tree View.
