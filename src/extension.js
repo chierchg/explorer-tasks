@@ -1,29 +1,20 @@
 const vscode = require("vscode");
 const {
   applyEdits,
-  findNodeAtLocation,
-  modify,
-  parse,
-  parseTree
+  modify
 } = require("jsonc-parser");
-
-const STARTER_TASK_CONFIGURATION = [
-  "{",
-  '  "version": "2.0.0",',
-  '  "tasks": [',
-  "    /* Example task:",
-  "    {",
-  '      "label": "Build",  // Display name must be unique within a workspace.',
-  '      "type": "shell",   // Common task types include "shell" and "process".',
-  '      "command": "npm",  // Program or shell command to execute.',
-  '      "args": ["run", "build"],  // Arguments passed to the command.',
-  '      "icon": {"id": "package"}  // Optional task icon.',
-  "    }",
-  "    */",
-  "  ]",
-  "}",
-  ""
-].join("\n");
+const {
+  STARTER_TASK_CONFIGURATION,
+  findTaskDefinition,
+  parseTaskConfiguration,
+  revealTaskDefinition
+} = require("./task-configuration");
+const {
+  configuredTaskIcon,
+  createProjectTaskMatcher,
+  taskKey
+} = require("./task-model");
+const { buildTree, hasGroupPath } = require("./task-tree");
 
 class TasksProvider {
   constructor(workspaceState) {
@@ -113,7 +104,7 @@ class TasksProvider {
   async loadRootChildren() {
     try {
       const tasks = await vscode.tasks.fetchTasks();
-      const matchProjectTask = createProjectTaskMatcher();
+      const matchProjectTask = createProjectTaskMatcher(vscode);
       const executionsByTask = this.snapshotExecutions();
 
       const matched = tasks
@@ -193,7 +184,7 @@ class TasksProvider {
 
       return mode === "flat"
         ? [...items, ...orphanItems]
-        : [...buildTree(items, groupsExpanded), ...orphanItems];
+        : [...buildTree(vscode, items, groupsExpanded), ...orphanItems];
     } catch (error) {
       vscode.window.showErrorMessage(
         `Could not load tasks: ${error.message || error}`
@@ -510,6 +501,14 @@ function activate(context) {
     }
   );
 
+  const addTaskCommand = vscode.commands.registerCommand(
+    "explorerTasks.addTask",
+    async () => {
+      await addTask();
+      provider.refresh();
+    }
+  );
+
   const hideTaskCommand = vscode.commands.registerCommand(
     "explorerTasks.hideTask",
     item => setTaskHidden(item?.task, true)
@@ -644,6 +643,7 @@ function activate(context) {
     refreshCommand,
     modifyTaskCommand,
     openTaskConfigurationCommand,
+    addTaskCommand,
     hideTaskCommand,
     unhideTaskCommand,
     showHiddenTasksCommand,
@@ -663,6 +663,113 @@ function activate(context) {
 }
 
 function deactivate() {}
+
+async function addTask() {
+  const uri = projectTaskConfigurationUri();
+
+  if (!uri) {
+    vscode.window.showErrorMessage("Open a folder or workspace before adding a task.");
+    return;
+  }
+
+  try {
+    let exists = true;
+    try {
+      await vscode.workspace.fs.stat(uri);
+    } catch {
+      exists = false;
+    }
+
+    if (!exists && !vscode.workspace.workspaceFile && vscode.workspace.workspaceFolders?.[0]) {
+      await vscode.workspace.fs.createDirectory(
+        vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, ".vscode")
+      );
+    }
+
+    const document = exists
+      ? await vscode.workspace.openTextDocument(uri)
+      : undefined;
+    const text = document?.getText() || "";
+    const errors = [];
+    const root = text ? parseTaskConfiguration(text, errors) : undefined;
+
+    if (errors.length > 0 || (root !== undefined && (!root || typeof root !== "object" || Array.isArray(root)))) {
+      throw new Error("The task configuration contains invalid JSONC");
+    }
+
+    let path;
+    let definitions;
+    let createContainer;
+    if (Array.isArray(root?.tasks)) {
+      path = ["tasks"];
+      definitions = root.tasks;
+    } else if (Array.isArray(root?.tasks?.tasks)) {
+      path = ["tasks", "tasks"];
+      definitions = root.tasks.tasks;
+    } else if (Array.isArray(root?.settings?.tasks?.tasks)) {
+      path = ["settings", "tasks", "tasks"];
+      definitions = root.settings.tasks.tasks;
+    } else {
+      path = ["tasks"];
+      definitions = [];
+      createContainer = vscode.workspace.workspaceFile;
+    }
+
+    const labels = new Set(definitions.map(definition => definition?.label));
+    let label = "New task";
+    for (let suffix = 2; labels.has(label); suffix += 1) {
+      label = `New task ${suffix}`;
+    }
+
+    const definition = {
+      label,
+      type: "shell",
+      command: "echo",
+      args: ["Edit this task in tasks.json"]
+    };
+    let updated;
+
+    if (!exists) {
+      updated = JSON.stringify({ version: "2.0.0", tasks: [definition] }, null, 2) + "\n";
+      const edit = new vscode.WorkspaceEdit();
+      edit.createFile(uri);
+      edit.insert(uri, new vscode.Position(0, 0), updated);
+      if (!await vscode.workspace.applyEdit(edit)) {
+        throw new Error("The task configuration could not be created");
+      }
+    } else {
+      const targetPath = definitions.length > 0
+        ? [...path, definitions.length]
+        : path;
+      const value = definitions.length > 0
+        ? definition
+        : createContainer
+          ? { version: "2.0.0", tasks: [definition] }
+          : [definition];
+      updated = applyEdits(text, modify(text, targetPath, value, {
+        formattingOptions: { insertSpaces: true, tabSize: 2 }
+      }));
+      const fullRange = new vscode.Range(
+        document.positionAt(0),
+        document.positionAt(text.length)
+      );
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(uri, fullRange, updated);
+      if (!await vscode.workspace.applyEdit(edit) || !await document.save()) {
+        throw new Error("The task configuration could not be saved");
+      }
+    }
+
+    const scope = vscode.workspace.workspaceFile
+      ? vscode.TaskScope.Workspace
+      : vscode.workspace.workspaceFolders?.[0];
+    await openTaskDefinition({ name: label, definition: { type: "shell" }, scope });
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Could not add a task: ${error.message || error}`
+    );
+  }
+}
 
 async function openOrCreateTaskConfiguration() {
   const uri = projectTaskConfigurationUri();
@@ -714,18 +821,7 @@ async function openTaskDefinition(task) {
     const editor = await vscode.window.showTextDocument(document);
     const text = document.getText();
     const match = findTaskDefinition(text, task);
-    const labelNode = findNodeAtLocation(
-      match.tree,
-      [...match.path, "label"]
-    );
-
-    if (labelNode) {
-      const start = document.positionAt(labelNode.offset);
-      const end = document.positionAt(labelNode.offset + labelNode.length);
-      const range = new vscode.Range(start, end);
-      editor.selection = new vscode.Selection(start, start);
-      editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-    }
+    revealTaskDefinition(vscode, document, editor, match);
   } catch (error) {
     vscode.window.showErrorMessage(
       `Could not open the task configuration: ${error.message || error}`
@@ -791,88 +887,11 @@ async function setTaskHidden(task, hidden) {
   }
 }
 
-function findTaskDefinition(text, task) {
-  const errors = [];
-  const tree = parseTree(text, errors);
-  const root = parse(text);
-
-  if (!tree || errors.length > 0) {
-    throw new Error("The task configuration contains invalid JSONC");
-  }
-
-  const candidates = [
-    { path: ["tasks"], tasks: root?.tasks },
-    { path: ["tasks", "tasks"], tasks: root?.tasks?.tasks },
-    { path: ["settings", "tasks", "tasks"], tasks: root?.settings?.tasks?.tasks }
-  ];
-  const matches = [];
-
-  for (const candidate of candidates) {
-    if (!Array.isArray(candidate.tasks)) continue;
-
-    candidate.tasks.forEach((definition, index) => {
-      if (definition?.label !== task.name) return;
-      if (definition.type && definition.type !== task.definition?.type) return;
-      matches.push({ tree, path: [...candidate.path, index] });
-    });
-  }
-
-  if (matches.length === 0) {
-    throw new Error(`Definition for "${task.name}" was not found`);
-  }
-
-  if (matches.length > 1) {
-    throw new Error(`Multiple definitions match "${task.name}"`);
-  }
-
-  return matches[0];
-}
-
 function scopeOrder(task) {
   if (task.scope === vscode.TaskScope.Workspace) return -1;
   return (vscode.workspace.workspaceFolders || []).findIndex(
     folder => folder.uri.toString() === task.scope?.uri?.toString()
   );
-}
-
-// A spaced slash is reserved for grouping; ordinary paths and colons stay literal.
-function buildTree(items, expanded = true) {
-  const roots = [];
-  for (const item of items) {
-    const parts = item.task.name.split(" / ").map(part => part.trim());
-    if (parts.some(part => !part)) {
-      roots.push(item);
-      continue;
-    }
-    let children = roots;
-    const path = [];
-    for (const part of parts.slice(0, -1)) {
-      path.push(part);
-      let group = children.find(child => child.children && child.label === part);
-      if (!group) {
-        group = new vscode.TreeItem(
-          part,
-          expanded
-            ? vscode.TreeItemCollapsibleState.Expanded
-            : vscode.TreeItemCollapsibleState.Collapsed
-        );
-        group.id = `group:${expanded}:` + JSON.stringify(path);
-        group.contextValue = "explorerTaskGroup";
-        group.iconPath = new vscode.ThemeIcon("folder");
-        group.children = [];
-        children.push(group);
-      }
-      children = group.children;
-    }
-    item.label = parts[parts.length - 1];
-    children.push(item);
-  }
-  return roots;
-}
-
-function hasGroupPath(name) {
-  const parts = name.split(" / ").map(part => part.trim());
-  return parts.length > 1 && parts.every(Boolean);
 }
 
 function groupsExpandedByDefault() {
@@ -887,148 +906,6 @@ function viewMode() {
   return configuration.get
     ? configuration.get("viewMode", "tree")
     : "tree";
-}
-
-function createProjectTaskMatcher() {
-  const indexesByScope = new Map();
-
-  return task => {
-    if (task.scope === vscode.TaskScope.Global || !task.scope) {
-      return { index: -1, definition: undefined };
-    }
-
-    const folder = typeof task.scope === "object" ? task.scope : undefined;
-    const scopeKey = folder?.uri?.toString() || "workspace";
-    let index = indexesByScope.get(scopeKey);
-
-    if (!index) {
-      const configuration = vscode.workspace
-        .getConfiguration("tasks", folder?.uri)
-        .inspect("tasks");
-      const definitions = folder
-        ? configuration?.workspaceFolderValue ?? configuration?.workspaceValue
-        : configuration?.workspaceValue;
-      index = indexTaskDefinitions(definitions);
-      indexesByScope.set(scopeKey, index);
-    }
-
-    const labeled = index.byLabel.get(task.name) || [];
-    const provider = index.unlabeledByType.get(task.definition.type) || [];
-    const matches = [
-      ...labeled.filter(({ definition }) =>
-        !definition.type || definition.type === task.definition.type
-      ),
-      ...provider.filter(({ definition }) => providerDefinitionMatches(definition, task))
-    ];
-    const match = matches.reduce(
-      (first, candidate) => !first || candidate.index < first.index ? candidate : first,
-      undefined
-    );
-
-    return match
-      ? { ...match, duplicateLabel: labeled.length > 1 }
-      : { index: -1, definition: undefined, duplicateLabel: false };
-  };
-}
-
-function indexTaskDefinitions(definitions) {
-  const byLabel = new Map();
-  const unlabeledByType = new Map();
-
-  if (!Array.isArray(definitions)) {
-    return { byLabel, unlabeledByType };
-  }
-
-  definitions.forEach((definition, index) => {
-    if (!definition || typeof definition !== "object") return;
-    const entry = { index, definition };
-
-    if (definition.label) {
-      const entries = byLabel.get(definition.label) || [];
-      entries.push(entry);
-      byLabel.set(definition.label, entries);
-    } else if (definition.type) {
-      const entries = unlabeledByType.get(definition.type) || [];
-      entries.push(entry);
-      unlabeledByType.set(definition.type, entries);
-    }
-  });
-
-  return { byLabel, unlabeledByType };
-}
-
-function providerDefinitionMatches(definition, task) {
-  const identityKeys = Object.keys(task.definition).filter(
-    key => key !== "type" && key !== "_key"
-  );
-  const configuredKeys = identityKeys.filter(key => key in definition);
-
-  return configuredKeys.length > 0 && configuredKeys.every(key =>
-    stableStringify(definition[key]) === stableStringify(task.definition[key])
-  );
-}
-
-function configuredTaskIcon(definition) {
-  const icon = definition?.icon;
-  if (!icon || typeof icon !== "object") return undefined;
-  if (typeof icon.id !== "string" || !icon.id.trim()) return undefined;
-
-  return {
-    id: icon.id.trim(),
-    color: typeof icon.color === "string" && icon.color.trim()
-      ? icon.color.trim()
-      : undefined
-  };
-}
-
-function taskKey(task) {
-  let scope = "";
-
-  if (
-    task.scope &&
-    typeof task.scope === "object" &&
-    task.scope.uri
-  ) {
-    scope = task.scope.uri.toString();
-  } else {
-    scope = String(task.scope ?? "");
-  }
-
-  // A configured task label identifies the task within its workspace scope.
-  // Provider metadata and definitions can be resolved differently per execution.
-  return JSON.stringify([
-    scope,
-    task.name || ""
-  ]);
-}
-
-function stableStringify(value) {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-
-  if (Array.isArray(value)) {
-    return (
-      "[" +
-      value.map(stableStringify).join(",") +
-      "]"
-    );
-  }
-
-  const keys = Object.keys(value).sort();
-
-  return (
-    "{" +
-    keys
-      .map(
-        key =>
-          JSON.stringify(key) +
-          ":" +
-          stableStringify(value[key])
-      )
-      .join(",") +
-    "}"
-  );
 }
 
 function escapeMarkdown(value) {

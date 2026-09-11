@@ -18,7 +18,7 @@ dependency; verify it appears in the VSIX file list.
 
 Press `F5` to launch the Extension Development Host. It opens `test-workspace`, which contains tasks for manually exercising the extension while loading the extension code directly from this repository.
 
-After changing JavaScript or manifest contributions, close the Development Host **or** run **Developer: Reload Window** in the Development Host. Installing a VSIX is not required during development.
+After changing JavaScript in `src/` or manifest contributions, close the Development Host **or** run **Developer: Reload Window** in the Development Host. Installing a VSIX is not required during development.
 
 Run the automated checks with:
 
