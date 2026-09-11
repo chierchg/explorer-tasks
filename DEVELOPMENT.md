@@ -71,7 +71,7 @@ The version commit and tag are local until pushed, so they can be corrected befo
 1. Upload `dist/explorer-tasks.vsix` through the
    [Marketplace publisher management page](https://marketplace.visualstudio.com/manage).
 2. Run **Push release** task to push the current branch and its annotated version
-   tag to `origin`. 
+   tag to `origin`. The task also establishes the upstream for a new branch.
 
 > [!NOTE]
 > A normal `git push` does not push tags. If that happens, push the annotated local version tag with
