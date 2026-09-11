@@ -71,6 +71,19 @@
         "icon": "$(edit)"
       },
       {
+        "command": "explorerTasks.openTaskConfiguration",
+        "title": "Open or Create tasks.json",
+        "category": "Explorer Tasks",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "explorerTasks.duplicateLabelWarning",
+        "title": "Duplicate label",
+        "category": "Explorer Tasks",
+        "icon": "$(warning)",
+        "enablement": "false"
+      },
+      {
         "command": "explorerTasks.hideTask",
         "title": "Hide",
         "category": "Explorer Tasks",
@@ -152,7 +165,7 @@
     "viewsWelcome": [
       {
         "view": "explorerTasks.tasksView",
-        "contents": "No project tasks found."
+        "contents": "No project tasks found.\n[Open or create tasks.json](command:explorerTasks.openTaskConfiguration)"
       }
     ],
     "menus": {
@@ -167,6 +180,10 @@
         },
         {
           "command": "explorerTasks.modifyTask",
+          "when": "false"
+        },
+        {
+          "command": "explorerTasks.duplicateLabelWarning",
           "when": "false"
         },
         {
@@ -268,6 +285,11 @@
           "command": "explorerTasks.unhideTask",
           "when": "view == explorerTasks.tasksView && (viewItem == explorerTaskHidden || viewItem == explorerTaskHiddenRunning)",
           "group": "inline@2"
+        },
+        {
+          "command": "explorerTasks.duplicateLabelWarning",
+          "when": "view == explorerTasks.tasksView && viewItem == explorerTaskDuplicate",
+          "group": "inline@1"
         }
       ]
     }

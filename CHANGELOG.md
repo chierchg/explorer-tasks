@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Require task labels to be unique within each workspace scope, reporting and displaying duplicated labels as disabled warning rows.
+- Add an empty-state action that opens or creates `tasks.json`.
+
 ## 0.5.3
 
 - Add image to README to illustrate the extension's features.

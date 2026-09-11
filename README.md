@@ -1,36 +1,44 @@
 # Explorer Tasks
 
+This extension provides a convenient way to view and run tasks defined in `.vscode/tasks.json` directly from the Explorer tab in VS Code. **Your tasks are now just a click away!**
+
+
 <img src="./media/explorer-tasks.png" width="550" alt="Project tasks directly in the VS Code Explorer"/>
 
-Run tasks directly from the Explorer tab. 
-
+Features:
 - Show tasks defined in `tasks.json` in their original order.
 - Run and stop tasks with a single click.
 - Hide individual tasks or reveal hidden tasks.
 - Group tasks using ` / ` in their labels.
 - Customize task icons and colors.
+- Create a starter `tasks.json` configuration when none exists.
 
 ## Task controls
 
 - Click an idle task to run it.
 - Click the Stop action to terminate a running task.
 - Click the Edit action to open its definition in `tasks.json`.
-- Click the Hide action to exclude a task from the view.
-- Click the Unhide action to reveal a hidden task.
-- If a running task is renamed or removed, its original label remains visible with a Stop action until that execution ends.
+- Click the Hide/Unhide action to hide or reveal a task in the view.
 
-*Note:* <br/>
-The Hide action adds `"hide": true` to the task definition in `tasks.json`, while the Unhide action removes it. <br/>
-You can hide or unhide tasks by editing `tasks.json` directly.
+### Important notes
+
+1. Task labels must be **unique within each workspace scope.** A duplicated label
+is shown as a disabled warning row until the definitions are renamed.
+
+2. If a running task is renamed or removed, its original label remains visible with a Stop action until the execution ends.
+
+3. The Hide action adds `"hide": true` to the task definition in `tasks.json`, while the Unhide action removes it. You can hide or unhide tasks by editing `tasks.json` directly.
+
 
 ## Toolbar actions
 
+- Create a new `.vscode/tasks.json` file if none exists.
 - Reload the task list manually.
 - Switch between Flat View and Tree View when groups exist.
 - Expand or Collapse groups in Tree View.
 - Show hidden tasks if any exist.
 
-*Note:* Flat/Tree and Expand/Collapse settings are saved per workspace in `.vscode/settings.json`.
+Flat/Tree and Expand/Collapse settings are saved per workspace in `.vscode/settings.json`.
 
 ## Organize tasks into groups
 
@@ -40,7 +48,7 @@ You can hide or unhide tasks by editing `tasks.json` directly.
 - Labels without ` / ` remain at the root. 
 - Ordinary slashes and colons are treated as part of the label.
 
-*Important:* Use the complete label when referencing a task in `dependsOn` or `preLaunchTask`.
+**Important:** Use the complete label when referencing a task in `dependsOn` or `preLaunchTask`.
 
 ```json
 {
