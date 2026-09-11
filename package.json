@@ -77,6 +77,17 @@
         "icon": "$(new-file)"
       },
       {
+        "command": "explorerTasks.openExistingTaskConfiguration",
+        "title": "Open tasks.json",
+        "category": "Explorer Tasks",
+        "enablement": "explorerTasks.hasTaskConfiguration"
+      },
+      {
+        "command": "explorerTasks.openTaskDocumentation",
+        "title": "Tasks Documentation",
+        "category": "Explorer Tasks"
+      },
+      {
         "command": "explorerTasks.addTask",
         "title": "Add Task",
         "category": "Explorer Tasks",
@@ -200,6 +211,10 @@
           "when": "false"
         },
         {
+          "command": "explorerTasks.openTaskConfiguration",
+          "when": "false"
+        },
+        {
           "command": "explorerTasks.duplicateLabelWarning",
           "when": "false"
         },
@@ -242,9 +257,19 @@
       ],
       "view/title": [
         {
+          "command": "explorerTasks.openExistingTaskConfiguration",
+          "when": "view == explorerTasks.tasksView",
+          "group": "configuration@2"
+        },
+        {
           "command": "explorerTasks.addInput",
           "when": "view == explorerTasks.tasksView",
           "group": "configuration@1"
+        },
+        {
+          "command": "explorerTasks.openTaskDocumentation",
+          "when": "view == explorerTasks.tasksView",
+          "group": "help@1"
         },
         {
           "command": "explorerTasks.addTask",

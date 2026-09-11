@@ -502,6 +502,18 @@ function activate(context) {
     }
   );
 
+  const openExistingTaskConfigurationCommand = vscode.commands.registerCommand(
+    "explorerTasks.openExistingTaskConfiguration",
+    openExistingTaskConfiguration
+  );
+
+  const openTaskDocumentationCommand = vscode.commands.registerCommand(
+    "explorerTasks.openTaskDocumentation",
+    () => vscode.env.openExternal(
+      vscode.Uri.parse("https://code.visualstudio.com/docs/editor/tasks")
+    )
+  );
+
   const addTaskCommand = vscode.commands.registerCommand(
     "explorerTasks.addTask",
     async () => {
@@ -649,6 +661,8 @@ function activate(context) {
     refreshCommand,
     modifyTaskCommand,
     openTaskConfigurationCommand,
+    openExistingTaskConfigurationCommand,
+    openTaskDocumentationCommand,
     addTaskCommand,
     addInputCommand,
     hideTaskCommand,
@@ -670,6 +684,21 @@ function activate(context) {
 }
 
 function deactivate() {}
+
+async function openExistingTaskConfiguration() {
+  const uri = projectTaskConfigurationUri();
+  if (!uri) return;
+
+  try {
+    await vscode.workspace.fs.stat(uri);
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document);
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Could not open the task configuration: ${error.message || error}`
+    );
+  }
+}
 
 async function addInput() {
   const choice = await vscode.window.showQuickPick([
