@@ -19,7 +19,7 @@
     "explorer",
     "productivity"
   ],
-  "main": "./extension.js",
+  "main": "./src/extension.js",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -30,7 +30,7 @@
   },
   "homepage": "https://github.com/chierchg/explorer-tasks#readme",
   "scripts": {
-    "check": "node --check extension.js",
+    "check": "node --check src/extension.js && node --check src/task-configuration.js && node --check src/task-model.js && node --check src/task-tree.js",
     "test": "node --test",
     "vscode:prepublish": "npm run check && npm test",
     "package": "node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\" && vsce package --out dist/explorer-tasks.vsix"
@@ -75,6 +75,12 @@
         "title": "Open or Create tasks.json",
         "category": "Explorer Tasks",
         "icon": "$(new-file)"
+      },
+      {
+        "command": "explorerTasks.addTask",
+        "title": "Add Task",
+        "category": "Explorer Tasks",
+        "icon": "$(add)"
       },
       {
         "command": "explorerTasks.duplicateLabelWarning",
@@ -231,6 +237,11 @@
       ],
       "view/title": [
         {
+          "command": "explorerTasks.addTask",
+          "when": "view == explorerTasks.tasksView",
+          "group": "navigation@3"
+        },
+        {
           "command": "explorerTasks.showHiddenTasks",
           "when": "view == explorerTasks.tasksView && explorerTasks.hasHiddenTasks && !explorerTasks.showHiddenTasks",
           "group": "navigation@0"
@@ -243,7 +254,7 @@
         {
           "command": "explorerTasks.refresh",
           "when": "view == explorerTasks.tasksView",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "explorerTasks.expandGroups",

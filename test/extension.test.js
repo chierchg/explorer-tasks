@@ -4,7 +4,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const test = require("node:test");
 
-const source = fs.readFileSync(path.join(__dirname, "../extension.js"), "utf8");
+const source = fs.readFileSync(path.join(__dirname, "../src/extension.js"), "utf8");
 const task = { name: "watch", source: "Workspace", scope: 2, definition: { type: "shell" } };
 const execution = (value = task) => ({ task: value, terminated: false, terminate() { this.terminated = true; } });
 
@@ -365,7 +365,13 @@ function setup(initial = []) {
     }
   };
   const sandbox = {
-    require: name => name === "vscode" ? vscode : require(name),
+    require: name => {
+      if (name === "vscode") return vscode;
+      if (name.startsWith("./")) {
+        return require(path.join(__dirname, "../src", `${name.slice(2)}.js`));
+      }
+      return require(name);
+    },
     module: { exports: {} },
     setTimeout: callback => {
       const id = ++nextTimerId;
@@ -760,6 +766,80 @@ test("the empty-state command opens or creates a task configuration", async () =
   assert.equal(app.contexts.get("explorerTasks.hasTaskConfiguration"), true);
 });
 
+test("Add Task appends uniquely named shell tasks and preserves JSONC", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
+  app.setDocumentText(`{
+  // Existing configuration stays intact.
+  "version": "2.0.0",
+  "tasks": [{ "label": "New task", "type": "shell", "command": "old" }]
+}`);
+
+  await app.commands.get("explorerTasks.addTask")();
+  const root = require("jsonc-parser").parse(app.getDocumentText());
+  assert.equal(root.tasks.length, 2);
+  assert.deepEqual(root.tasks[1], {
+    label: "New task 2",
+    type: "shell",
+    command: "echo",
+    args: ["Edit this task in tasks.json"]
+  });
+  assert.match(app.getDocumentText(), /Existing configuration stays intact/);
+  assert.notEqual(app.editor.selection, undefined);
+});
+
+test("Add Task accepts a trailing comma in tasks.json", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
+  app.setDocumentText(`{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Build", "type": "shell", "command": "npm run build" },
+  ],
+}`);
+
+  await app.commands.get("explorerTasks.addTask")();
+  assert.equal(app.errors.length, 0);
+  const errors = [];
+  const root = require("jsonc-parser").parse(
+    app.getDocumentText(),
+    errors,
+    { allowTrailingComma: true }
+  );
+  assert.equal(errors.length, 0);
+  assert.equal(root.tasks.length, 2);
+  assert.equal(root.tasks[1].label, "New task");
+});
+
+test("Add Task creates tasks.json with an active task when it is missing", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
+  app.setTaskConfigurationExists(false);
+
+  await app.commands.get("explorerTasks.addTask")();
+  assert.deepEqual(app.createdDirectories, ["workspace/.vscode"]);
+  assert.deepEqual(require("jsonc-parser").parse(app.getDocumentText()), {
+    version: "2.0.0",
+    tasks: [{
+      label: "New task",
+      type: "shell",
+      command: "echo",
+      args: ["Edit this task in tasks.json"]
+    }]
+  });
+});
+
+test("Add Task creates a workspace task container in a code-workspace file", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFile = "project.code-workspace";
+  app.setDocumentText('{"folders": []}');
+
+  await app.commands.get("explorerTasks.addTask")();
+  const root = require("jsonc-parser").parse(app.getDocumentText());
+  assert.equal(root.tasks.version, "2.0.0");
+  assert.equal(root.tasks.tasks[0].label, "New task");
+});
+
 test("definition property order does not change task identity", async () => {
   const app = setup();
   app.vscode.tasks.fetchTasks = async () => [{ ...task, definition: { type: "npm", script: "dev" } }];
@@ -820,6 +900,18 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
   assert.equal(commands.get("explorerTasks.collapseGroups").icon, "$(collapse-all)");
   assert.equal(commands.get("explorerTasks.showFlatView").icon, "$(list-flat)");
   assert.equal(commands.get("explorerTasks.showTreeView").icon, "$(list-tree)");
+  assert.equal(commands.get("explorerTasks.addTask").icon, "$(add)");
+  assert(manifest.contributes.menus["view/title"].some(entry =>
+    entry.command === "explorerTasks.addTask" &&
+      entry.when === "view == explorerTasks.tasksView" &&
+      entry.group === "navigation@3"
+  ));
+  assert.equal(
+    manifest.contributes.menus["view/title"].find(entry =>
+      entry.command === "explorerTasks.refresh"
+    ).group,
+    "navigation@4"
+  );
   assert(manifest.contributes.menus["view/title"]
     .filter(entry => /Groups|View/.test(entry.command))
     .every(entry => !entry.when.includes("config.explorerTasks")));

@@ -11,6 +11,7 @@ Features:
 - Group tasks using ` / ` in their labels.
 - Customize task icons and colors.
 - Create a starter `tasks.json` configuration when none exists.
+- Add a ready-to-edit task from the Tasks panel.
 
 See the [VS Code Tasks guide](https://code.visualstudio.com/docs/editor/tasks) for more information about tasks and their configuration.
 
@@ -23,8 +24,7 @@ See the [VS Code Tasks guide](https://code.visualstudio.com/docs/editor/tasks) f
 
 ### Important notes
 
-1. Task labels must be **unique within each workspace scope.** A duplicated label
-is shown as a disabled warning row until the definitions are renamed.
+1. Task labels must be **unique within each workspace scope.** A task with a duplicated label is disabled until it is renamed.
 
 2. If a running task is renamed or removed, its original label remains visible with a Stop action until the execution ends.
 
@@ -34,6 +34,7 @@ is shown as a disabled warning row until the definitions are renamed.
 ## Toolbar actions
 
 - Create a new `.vscode/tasks.json` file if none exists.
+- Add a shell task with a unique label and a placeholder command.
 - Reload the task list manually.
 - Switch between Flat View and Tree View when groups exist.
 - Expand or Collapse groups in Tree View.
