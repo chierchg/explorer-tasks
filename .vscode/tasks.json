@@ -33,6 +33,7 @@
       "command": "git",
       "args": [
         "push",
+        "--atomic",
         "--set-upstream",
         "origin",
         "HEAD",
