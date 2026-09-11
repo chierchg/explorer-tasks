@@ -253,6 +253,8 @@ function setup(initial = []) {
   const openedDocuments = [];
   const editor = { selection: undefined, revealRange() {} };
   let documentText = '{"tasks":[{"label":"watch","type":"shell"}]}';
+  let taskConfigurationExists = true;
+  const createdDirectories = [];
   const contexts = new Map();
   const contextUpdates = [];
   const workspaceValues = new Map();
@@ -276,9 +278,12 @@ function setup(initial = []) {
     ThemeIcon: class { constructor(id, color) { this.id = id; this.color = color; } },
     ThemeColor: class { constructor(id) { this.id = id; } },
     Range: class { constructor(start, end) { this.start = start; this.end = end; } },
+    Position: class { constructor(line, character) { this.line = line; this.character = character; } },
     Selection: class { constructor(start, end) { this.start = start; this.end = end; } },
     WorkspaceEdit: class {
       replace(uri, range, text) { this.replacement = { uri, range, text }; }
+      createFile(uri) { this.createdFile = uri; }
+      insert(uri, position, text) { this.insertion = { uri, position, text }; }
     },
     TextEditorRevealType: { InCenterIfOutsideViewport: 0 },
     MarkdownString: class {
@@ -320,6 +325,13 @@ function setup(initial = []) {
       showErrorMessage: message => errors.push(message)
     },
     workspace: {
+      fs: {
+        stat: async () => {
+          if (!taskConfigurationExists) throw Error("File not found");
+          return {};
+        },
+        createDirectory: async uri => createdDirectories.push(uri)
+      },
       getConfiguration: section => section === "explorerTasks"
         ? {
             get: (key, fallback) => explorerSettings[key] ?? fallback,
@@ -335,7 +347,11 @@ function setup(initial = []) {
         };
       },
       applyEdit: async edit => {
-        documentText = edit.replacement.text;
+        if (edit.replacement) documentText = edit.replacement.text;
+        if (edit.createdFile) {
+          taskConfigurationExists = true;
+          documentText = edit.insertion?.text || "";
+        }
         return true;
       },
       onDidChangeConfiguration: callback => { configurationChanged = callback; return disposable(); },
@@ -367,7 +383,7 @@ function setup(initial = []) {
       update: async (key, value) => workspaceValues.set(key, value)
     }
   });
-  return { provider, decorationProvider, vscode, commands, contexts, contextUpdates, editor, errors, emitters, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, openedDocuments, subscriptions, treeView, uiCommands,
+  return { provider, decorationProvider, vscode, commands, contexts, contextUpdates, createdDirectories, editor, errors, emitters, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, setTaskConfigurationExists: value => { taskConfigurationExists = value; }, openedDocuments, subscriptions, treeView, uiCommands,
     changeConfiguration: event => configurationChanged(event), changeTaskFile: () => taskWatcherCallbacks.change(), changeWorkspaceFolders: () => workspaceFoldersChanged(),
     runTimers: () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); },
     start: value => start({ execution: value }), end: value => end({ execution: value }) };
@@ -668,6 +684,67 @@ test("tasks with the same name in different folders remain independent", async (
   assert.equal(items[1].description, undefined);
 });
 
+test("duplicate labels in one scope are disabled warning rows and reported once", async () => {
+  const app = setup();
+  app.vscode.workspace.getConfiguration = section => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceValue: [
+        { label: "watch", type: "shell" },
+        { label: "watch", type: "process" }
+      ] }) };
+  app.vscode.tasks.fetchTasks = async () => [
+    task,
+    { ...task, definition: { type: "process" } }
+  ];
+
+  const [item] = await app.provider.getChildren();
+  assert.equal(item.label, "watch");
+  assert.equal(item.contextValue, "explorerTaskDuplicate");
+  assert.equal(item.description, "Duplicate label");
+  assert.equal(item.iconPath.id, "gear");
+  assert.equal(item.iconPath.color.id, "list.deemphasizedForeground");
+  assert.equal(item.resourceUri.scheme, "explorer-task-duplicate");
+  assert.equal(
+    app.decorationProvider.provideFileDecoration(item.resourceUri).color.id,
+    "list.deemphasizedForeground"
+  );
+  assert.equal(item.command, undefined);
+  assert.match(item.tooltip.value, /rename one of the tasks/);
+  assert.match(app.errors[0], /requires task labels to be unique/);
+  assert.match(app.errors[0], /"watch" in the workspace/);
+  await app.provider.getChildren();
+  assert.equal(app.errors.length, 1);
+});
+
+test("the same label remains valid in different workspace folders", async () => {
+  const app = setup();
+  const folders = ["one", "two"].map(name => ({
+    name,
+    uri: { toString: () => `file:///${name}` }
+  }));
+  app.vscode.workspace.workspaceFolders = folders;
+  app.vscode.workspace.getConfiguration = (section, uri) => section === "explorerTasks"
+    ? { get: (_, fallback) => fallback }
+    : { inspect: () => ({ workspaceFolderValue: [{ label: "watch", type: "shell" }] }) };
+  app.vscode.tasks.fetchTasks = async () => folders.map(scope => ({ ...task, scope }));
+
+  assert.equal((await app.provider.getChildren()).length, 2);
+  assert.equal(app.errors.length, 0);
+});
+
+test("the empty-state command opens or creates a task configuration", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
+
+  await app.commands.get("explorerTasks.openTaskConfiguration")();
+  assert.equal(app.openedDocuments.at(-1), "workspace/.vscode/tasks.json");
+
+  app.setTaskConfigurationExists(false);
+  await app.commands.get("explorerTasks.openTaskConfiguration")();
+  assert.deepEqual(app.createdDirectories, ["workspace/.vscode"]);
+  assert.equal(app.getDocumentText(), '{\n  "version": "2.0.0",\n  "tasks": []\n}\n');
+});
+
 test("definition property order does not change task identity", async () => {
   const app = setup();
   app.vscode.tasks.fetchTasks = async () => [{ ...task, definition: { type: "npm", script: "dev" } }];
@@ -699,6 +776,20 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
     assert(manifest.contributes.menus["view/item/context"].some(entry => entry.command === command));
   }
   const itemMenus = manifest.contributes.menus["view/item/context"];
+  const duplicateWarning = itemMenus.find(entry =>
+    entry.command === "explorerTasks.duplicateLabelWarning"
+  );
+  assert(duplicateWarning.when.includes("explorerTaskDuplicate"));
+  assert(duplicateWarning.group.startsWith("inline"));
+  assert.equal(
+    manifest.contributes.commands.find(command =>
+      command.command === "explorerTasks.duplicateLabelWarning"
+    ).enablement,
+    "false"
+  );
+  assert(itemMenus
+    .filter(entry => entry.command !== "explorerTasks.duplicateLabelWarning")
+    .every(entry => !entry.when.includes("explorerTaskDuplicate")));
   assert(!itemMenus.find(entry => entry.command === "explorerTasks.runTask").group.startsWith("inline"));
   assert(itemMenus.find(entry => entry.command === "explorerTasks.stopTask").group.startsWith("inline"));
   assert(itemMenus.find(entry => entry.command === "explorerTasks.modifyTask").group.startsWith("inline"));
@@ -718,7 +809,8 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
     .filter(entry => /Groups|View/.test(entry.command))
     .every(entry => !entry.when.includes("config.explorerTasks")));
   assert(manifest.contributes.viewsWelcome.some(entry =>
-    entry.view === "explorerTasks.tasksView" && !entry.contents.includes("command:")
+    entry.view === "explorerTasks.tasksView" &&
+      entry.contents.includes("command:explorerTasks.openTaskConfiguration")
   ));
 });
 

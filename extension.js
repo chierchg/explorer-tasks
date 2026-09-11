@@ -22,6 +22,7 @@ class TasksProvider {
     this.contextValues = new Map();
     this.currentProjectTaskKeys = new Set();
     this.trackedRunningTaskKeys = new Set();
+    this.duplicateLabelsSignature = undefined;
 
     // Pick up tasks that were already running before
     // this view/extension was activated.
@@ -97,9 +98,20 @@ class TasksProvider {
       const matchProjectTask = createProjectTaskMatcher();
       const executionsByTask = this.snapshotExecutions();
 
-      const ordered = tasks
+      const matched = tasks
         .map(task => ({ task, key: taskKey(task), ...matchProjectTask(task) }))
-        .filter(entry => entry.index >= 0)
+        .filter(entry => entry.index >= 0);
+      const duplicateLabels = matched.filter(entry => entry.duplicateLabel);
+      this.reportDuplicateLabels(duplicateLabels);
+
+      const seenDuplicateKeys = new Set();
+      const ordered = matched
+        .filter(entry => {
+          if (!entry.duplicateLabel) return true;
+          if (seenDuplicateKeys.has(entry.key)) return false;
+          seenDuplicateKeys.add(entry.key);
+          return true;
+        })
         .sort((a, b) => scopeOrder(a.task) - scopeOrder(b.task) || a.index - b.index);
       this.currentProjectTaskKeys = new Set(ordered.map(({ key }) => key));
 
@@ -110,8 +122,8 @@ class TasksProvider {
       const hasHiddenTasks = ordered.some(({ definition }) => definition?.hide === true);
       const displayed = this.showHidden
         ? ordered
-        : ordered.filter(({ key, definition }) =>
-            definition?.hide !== true || executionsByTask.has(key)
+        : ordered.filter(({ key, definition, duplicateLabel }) =>
+            definition?.hide !== true || executionsByTask.has(key) || duplicateLabel
           );
 
       const hasTaskGroups = displayed.some(({ task }) => hasGroupPath(task.name));
@@ -125,13 +137,15 @@ class TasksProvider {
         "explorerTasks.groupsExpanded": groupsExpanded
       });
 
-      const items = displayed.map(({ task, key, definition }) => {
+      const items = displayed.map(({ task, key, definition, duplicateLabel }) => {
         return new TaskItem(
           task,
           key,
-          executionsByTask.has(key),
+          !duplicateLabel && executionsByTask.has(key),
           configuredTaskIcon(definition),
-          definition?.hide === true
+          definition?.hide === true,
+          false,
+          duplicateLabel
         );
       });
       const orphanItems = [];
@@ -256,10 +270,36 @@ class TasksProvider {
     await this.workspaceState.update("showHiddenTasks", value);
     this.refresh();
   }
+
+  reportDuplicateLabels(entries) {
+    const duplicates = [...new Map(entries.map(entry => [entry.key, entry.task])).values()];
+    const signature = duplicates.map(taskKey).sort().join("\n");
+
+    if (!signature) {
+      this.duplicateLabelsSignature = undefined;
+      return;
+    }
+
+    if (signature === this.duplicateLabelsSignature) return;
+    this.duplicateLabelsSignature = signature;
+
+    const descriptions = duplicates.map(task => {
+      const scope = typeof task.scope === "object"
+        ? `workspace folder "${task.scope.name || task.scope.uri.toString()}"`
+        : "workspace";
+      return `"${task.name}" in the ${scope}`;
+    });
+
+    vscode.window.showErrorMessage(
+      `Explorer Tasks requires task labels to be unique within each workspace scope. ` +
+      `Duplicate ${descriptions.length === 1 ? "label" : "labels"}: ${descriptions.join(", ")}. ` +
+      `Rename ${descriptions.length === 1 ? "one of the tasks" : "the duplicated tasks"} in tasks.json.`
+    );
+  }
 }
 
 class TaskItem extends vscode.TreeItem {
-  constructor(task, key, running, icon, hidden, orphan = false) {
+  constructor(task, key, running, icon, hidden, orphan = false, duplicate = false) {
     super(
       task.name,
       vscode.TreeItemCollapsibleState.None
@@ -271,21 +311,30 @@ class TaskItem extends vscode.TreeItem {
 
     this.hidden = hidden;
     this.orphan = orphan;
+    this.duplicate = duplicate;
     const hiddenColor = hidden
       ? new vscode.ThemeColor("list.deemphasizedForeground")
       : undefined;
-    this.contextValue = orphan
-      ? "explorerTaskOrphanRunning"
-      : hidden
-        ? (running ? "explorerTaskHiddenRunning" : "explorerTaskHidden")
-        : (running ? "explorerTaskRunning" : "explorerTask");
+    this.contextValue = duplicate
+      ? "explorerTaskDuplicate"
+      : orphan
+        ? "explorerTaskOrphanRunning"
+        : hidden
+          ? (running ? "explorerTaskHiddenRunning" : "explorerTaskHidden")
+          : (running ? "explorerTaskRunning" : "explorerTask");
 
-    if (orphan) {
+    if (duplicate) {
+      this.description = "Duplicated";
+    } else if (orphan) {
       this.description = "Running · no matching definition";
     } else if (hidden) {
       this.description = "Hidden";
     }
-    if (hidden) {
+    if (duplicate) {
+      this.resourceUri = vscode.Uri.parse(
+        `explorer-task-duplicate:/${encodeURIComponent(key)}`
+      );
+    } else if (hidden) {
       this.resourceUri = vscode.Uri.parse(
         `explorer-task-hidden:/${encodeURIComponent(key)}`
       );
@@ -296,13 +345,18 @@ class TaskItem extends vscode.TreeItem {
     } else if (icon) {
       this.iconPath = new vscode.ThemeIcon(
         icon.id,
-        hiddenColor || (icon.color ? new vscode.ThemeColor(icon.color) : undefined)
+        duplicate
+          ? new vscode.ThemeColor("list.deemphasizedForeground")
+          : hiddenColor || (icon.color ? new vscode.ThemeColor(icon.color) : undefined)
       );
     } else {
-      this.iconPath = new vscode.ThemeIcon("gear", hiddenColor);
+      this.iconPath = new vscode.ThemeIcon(
+        "gear",
+        duplicate ? new vscode.ThemeColor("list.deemphasizedForeground") : hiddenColor
+      );
     }
 
-    if (!running) {
+    if (!running && !duplicate) {
       this.command = {
         command: "explorerTasks.runTask",
         title: "Run Task",
@@ -322,7 +376,11 @@ class TaskItem extends vscode.TreeItem {
       );
     }
 
-    if (orphan) {
+    if (duplicate) {
+      this.tooltip.appendMarkdown(
+        `$(warning) Duplicate label — rename one of the tasks in tasks.json before running it`
+      );
+    } else if (orphan) {
       this.tooltip.appendMarkdown(
         `$(debug-stop) Running — the task definition changed or was removed; use the Stop action to terminate`
       );
@@ -346,7 +404,10 @@ function activate(context) {
   const hiddenTaskDecorationProvider =
     vscode.window.registerFileDecorationProvider({
       provideFileDecoration(uri) {
-        if (uri.scheme !== "explorer-task-hidden") return undefined;
+        if (
+          uri.scheme !== "explorer-task-hidden" &&
+          uri.scheme !== "explorer-task-duplicate"
+        ) return undefined;
 
         return {
           color: new vscode.ThemeColor("list.deemphasizedForeground")
@@ -419,6 +480,11 @@ function activate(context) {
   const modifyTaskCommand = vscode.commands.registerCommand(
     "explorerTasks.modifyTask",
     item => openTaskDefinition(item?.task)
+  );
+
+  const openTaskConfigurationCommand = vscode.commands.registerCommand(
+    "explorerTasks.openTaskConfiguration",
+    openOrCreateTaskConfiguration
   );
 
   const hideTaskCommand = vscode.commands.registerCommand(
@@ -554,6 +620,7 @@ function activate(context) {
     stopCommand,
     refreshCommand,
     modifyTaskCommand,
+    openTaskConfigurationCommand,
     hideTaskCommand,
     unhideTaskCommand,
     showHiddenTasksCommand,
@@ -573,6 +640,44 @@ function activate(context) {
 }
 
 function deactivate() {}
+
+async function openOrCreateTaskConfiguration() {
+  const uri = projectTaskConfigurationUri();
+
+  if (!uri) {
+    vscode.window.showErrorMessage("Open a folder or workspace before creating tasks.json.");
+    return;
+  }
+
+  try {
+    try {
+      await vscode.workspace.fs.stat(uri);
+    } catch {
+      if (!vscode.workspace.workspaceFile && vscode.workspace.workspaceFolders?.[0]) {
+        await vscode.workspace.fs.createDirectory(
+          vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, ".vscode")
+        );
+      }
+      const edit = new vscode.WorkspaceEdit();
+      edit.createFile(uri);
+      edit.insert(
+        uri,
+        new vscode.Position(0, 0),
+        '{\n  "version": "2.0.0",\n  "tasks": []\n}\n'
+      );
+      if (!await vscode.workspace.applyEdit(edit)) {
+        throw new Error("The task configuration could not be created");
+      }
+    }
+
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document);
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Could not open or create the task configuration: ${error.message || error}`
+    );
+  }
+}
 
 async function openTaskDefinition(task) {
   if (!task) return;
@@ -607,9 +712,11 @@ async function openTaskDefinition(task) {
 
 function taskConfigurationUri(task) {
   const folder = typeof task.scope === "object" ? task.scope : undefined;
-  return folder
-    ? vscode.Uri.joinPath(folder.uri, ".vscode", "tasks.json")
-    : vscode.workspace.workspaceFile || (
+  return folder ? vscode.Uri.joinPath(folder.uri, ".vscode", "tasks.json") : projectTaskConfigurationUri();
+}
+
+function projectTaskConfigurationUri() {
+  return vscode.workspace.workspaceFile || (
         vscode.workspace.workspaceFolders?.[0]
           ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, ".vscode", "tasks.json")
           : undefined
@@ -783,7 +890,9 @@ function createProjectTaskMatcher() {
       undefined
     );
 
-    return match || { index: -1, definition: undefined };
+    return match
+      ? { ...match, duplicateLabel: labeled.length > 1 }
+      : { index: -1, definition: undefined, duplicateLabel: false };
   };
 }
 
