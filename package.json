@@ -165,7 +165,13 @@
     "viewsWelcome": [
       {
         "view": "explorerTasks.tasksView",
-        "contents": "No project tasks found.\n[Open or create tasks.json](command:explorerTasks.openTaskConfiguration)"
+        "contents": "No project tasks found.\n[Open tasks.json](command:explorerTasks.openTaskConfiguration)",
+        "when": "explorerTasks.hasTaskConfiguration"
+      },
+      {
+        "view": "explorerTasks.tasksView",
+        "contents": "No project tasks found.\n[Create tasks.json](command:explorerTasks.openTaskConfiguration)",
+        "when": "!explorerTasks.hasTaskConfiguration"
       }
     ],
     "menus": {

@@ -7,6 +7,24 @@ const {
   parseTree
 } = require("jsonc-parser");
 
+const STARTER_TASK_CONFIGURATION = [
+  "{",
+  '  "version": "2.0.0",',
+  '  "tasks": [',
+  "    /* Example task:",
+  "    {",
+  '      "label": "Build",  // Display name must be unique within a workspace.',
+  '      "type": "shell",   // Common task types include "shell" and "process".',
+  '      "command": "npm",  // Program or shell command to execute.',
+  '      "args": ["run", "build"],  // Arguments passed to the command.',
+  '      "icon": {"id": "package"}  // Optional task icon.',
+  "    }",
+  "    */",
+  "  ]",
+  "}",
+  ""
+].join("\n");
+
 class TasksProvider {
   constructor(workspaceState) {
     this.workspaceState = workspaceState;
@@ -129,12 +147,14 @@ class TasksProvider {
       const hasTaskGroups = displayed.some(({ task }) => hasGroupPath(task.name));
       const mode = viewMode();
       const groupsExpanded = groupsExpandedByDefault();
+      const hasTaskConfiguration = await taskConfigurationExists();
       await this.updateContexts({
         "explorerTasks.hasHiddenTasks": hasHiddenTasks,
         "explorerTasks.showHiddenTasks": this.showHidden,
         "explorerTasks.hasTaskGroups": hasTaskGroups,
         "explorerTasks.treeViewMode": mode === "tree",
-        "explorerTasks.groupsExpanded": groupsExpanded
+        "explorerTasks.groupsExpanded": groupsExpanded,
+        "explorerTasks.hasTaskConfiguration": hasTaskConfiguration
       });
 
       const items = displayed.map(({ task, key, definition, duplicateLabel }) => {
@@ -484,7 +504,10 @@ function activate(context) {
 
   const openTaskConfigurationCommand = vscode.commands.registerCommand(
     "explorerTasks.openTaskConfiguration",
-    openOrCreateTaskConfiguration
+    async () => {
+      await openOrCreateTaskConfiguration();
+      provider.refresh();
+    }
   );
 
   const hideTaskCommand = vscode.commands.registerCommand(
@@ -663,7 +686,7 @@ async function openOrCreateTaskConfiguration() {
       edit.insert(
         uri,
         new vscode.Position(0, 0),
-        '{\n  "version": "2.0.0",\n  "tasks": []\n}\n'
+        STARTER_TASK_CONFIGURATION
       );
       if (!await vscode.workspace.applyEdit(edit)) {
         throw new Error("The task configuration could not be created");
@@ -721,6 +744,18 @@ function projectTaskConfigurationUri() {
           ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, ".vscode", "tasks.json")
           : undefined
       );
+}
+
+async function taskConfigurationExists() {
+  const uri = projectTaskConfigurationUri();
+  if (!uri) return false;
+
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function setTaskHidden(task, hidden) {

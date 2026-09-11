@@ -510,14 +510,14 @@ test("unchanged view contexts are not sent again", async () => {
   const app = setup();
 
   await app.provider.getChildren();
-  assert.equal(app.contextUpdates.length, 5);
+  assert.equal(app.contextUpdates.length, 6);
   await app.provider.getChildren();
-  assert.equal(app.contextUpdates.length, 5);
+  assert.equal(app.contextUpdates.length, 6);
 
   await app.provider.setShowHidden(true);
   await app.provider.getChildren();
-  assert.equal(app.contextUpdates.length, 6);
-  assert.deepEqual(app.contextUpdates[5], ["explorerTasks.showHiddenTasks", true]);
+  assert.equal(app.contextUpdates.length, 7);
+  assert.deepEqual(app.contextUpdates[6], ["explorerTasks.showHiddenTasks", true]);
 });
 
 test("Run delegates to VS Code and start events update the view", async () => {
@@ -700,7 +700,7 @@ test("duplicate labels in one scope are disabled warning rows and reported once"
   const [item] = await app.provider.getChildren();
   assert.equal(item.label, "watch");
   assert.equal(item.contextValue, "explorerTaskDuplicate");
-  assert.equal(item.description, "Duplicate label");
+  assert.equal(item.description, "Duplicated");
   assert.equal(item.iconPath.id, "gear");
   assert.equal(item.iconPath.color.id, "list.deemphasizedForeground");
   assert.equal(item.resourceUri.scheme, "explorer-task-duplicate");
@@ -736,13 +736,28 @@ test("the empty-state command opens or creates a task configuration", async () =
   const app = setup();
   app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
 
+  await app.provider.getChildren();
+  assert.equal(app.contexts.get("explorerTasks.hasTaskConfiguration"), true);
   await app.commands.get("explorerTasks.openTaskConfiguration")();
   assert.equal(app.openedDocuments.at(-1), "workspace/.vscode/tasks.json");
 
   app.setTaskConfigurationExists(false);
+  await app.provider.getChildren();
+  assert.equal(app.contexts.get("explorerTasks.hasTaskConfiguration"), false);
   await app.commands.get("explorerTasks.openTaskConfiguration")();
   assert.deepEqual(app.createdDirectories, ["workspace/.vscode"]);
-  assert.equal(app.getDocumentText(), '{\n  "version": "2.0.0",\n  "tasks": []\n}\n');
+  const starter = app.getDocumentText();
+  assert.deepEqual(require("jsonc-parser").parse(starter), {
+    version: "2.0.0",
+    tasks: []
+  });
+  assert.match(starter, /\/\* Example task:/);
+  assert.match(starter, /\n    \*\/\n/);
+  for (const field of ["label", "type", "command", "args", "icon"]) {
+    assert.match(starter, new RegExp(` +"${field}"[^\\n]*// .+`));
+  }
+  await app.provider.getChildren();
+  assert.equal(app.contexts.get("explorerTasks.hasTaskConfiguration"), true);
 });
 
 test("definition property order does not change task identity", async () => {
@@ -808,9 +823,17 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
   assert(manifest.contributes.menus["view/title"]
     .filter(entry => /Groups|View/.test(entry.command))
     .every(entry => !entry.when.includes("config.explorerTasks")));
-  assert(manifest.contributes.viewsWelcome.some(entry =>
-    entry.view === "explorerTasks.tasksView" &&
-      entry.contents.includes("command:explorerTasks.openTaskConfiguration")
+  const welcomeEntries = manifest.contributes.viewsWelcome.filter(entry =>
+    entry.view === "explorerTasks.tasksView"
+  );
+  assert.equal(welcomeEntries.length, 2);
+  assert(welcomeEntries.some(entry =>
+    entry.contents.includes("[Open tasks.json]") &&
+      entry.when === "explorerTasks.hasTaskConfiguration"
+  ));
+  assert(welcomeEntries.some(entry =>
+    entry.contents.includes("[Create tasks.json]") &&
+      entry.when === "!explorerTasks.hasTaskConfiguration"
   ));
 });
 
