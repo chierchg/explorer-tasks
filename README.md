@@ -2,7 +2,6 @@
 
 This extension provides a convenient way to view and run tasks defined in `.vscode/tasks.json` directly from the Explorer tab in VS Code. **Your tasks are now just a click away!**
 
-
 <img src="./media/explorer-tasks.png" width="550" alt="Project tasks directly in the VS Code Explorer"/>
 
 Features:
@@ -12,6 +11,8 @@ Features:
 - Group tasks using ` / ` in their labels.
 - Customize task icons and colors.
 - Create a starter `tasks.json` configuration when none exists.
+
+See the [VS Code Tasks guide](https://code.visualstudio.com/docs/editor/tasks) for more information about tasks and their configuration.
 
 ## Task controls
 

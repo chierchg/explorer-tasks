@@ -8,30 +8,23 @@
       "args": [
         "--test"
       ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
       "group": "test",
-      //"dependsOn": ["-- Tests -- / Quick success"]
+      "icon": {"id": "beaker"}
     },
     {
       "label": "Release / 1. Increase version",
       "detail": "Updates package.json and package-lock.json, then creates a Git commit and version tag.",
       "type": "shell",
       "command": "npm version ${input:versionBump}",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "icon": {"id": "fold-up"}
     },
     {
       "label": "Release / 2. Build package",
       "detail": "Builds the VSIX package for Marketplace publication.",
       "type": "shell",
       "command": "npm run package",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
       "group": "build",
+      "icon": {"id": "package"}
     },
     {
       "label": "Release / 3. Push release",
@@ -44,9 +37,7 @@
         "HEAD",
         "--follow-tags"
       ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "icon": {"id": "cloud-upload"}
     }
   ],
   "inputs": [
