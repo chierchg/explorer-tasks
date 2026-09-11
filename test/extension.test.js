@@ -251,6 +251,7 @@ function setup(initial = []) {
   const treeView = { selection: [], dispose() {} };
   const uiCommands = [];
   const openedDocuments = [];
+  const externalUris = [];
   const editor = { selection: undefined, revealRange() {} };
   let documentText = '{"tasks":[{"label":"watch","type":"shell"}]}';
   let taskConfigurationExists = true;
@@ -300,6 +301,9 @@ function setup(initial = []) {
       },
       onDidStartTask: callback => { start = callback; return disposable(); },
       onDidEndTask: callback => { end = callback; return disposable(); }
+    },
+    env: {
+      openExternal: async uri => { externalUris.push(uri); return true; }
     },
     Uri: {
       joinPath: (...parts) => parts.join("/"),
@@ -390,7 +394,7 @@ function setup(initial = []) {
       update: async (key, value) => workspaceValues.set(key, value)
     }
   });
-  return { provider, decorationProvider, vscode, commands, contexts, contextUpdates, createdDirectories, editor, errors, emitters, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, setTaskConfigurationExists: value => { taskConfigurationExists = value; }, openedDocuments, subscriptions, treeView, uiCommands,
+  return { provider, decorationProvider, vscode, commands, contexts, contextUpdates, createdDirectories, editor, errors, emitters, externalUris, getDocumentText: () => documentText, setDocumentText: value => { documentText = value; }, setTaskConfigurationExists: value => { taskConfigurationExists = value; }, openedDocuments, subscriptions, treeView, uiCommands,
     changeConfiguration: event => configurationChanged(event), changeTaskFile: () => taskWatcherCallbacks.change(), changeWorkspaceFolders: () => workspaceFoldersChanged(),
     runTimers: () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); },
     start: value => start({ execution: value }), end: value => end({ execution: value }) };
@@ -767,6 +771,29 @@ test("the empty-state command opens or creates a task configuration", async () =
   assert.equal(app.contexts.get("explorerTasks.hasTaskConfiguration"), true);
 });
 
+test("the overflow menu opens an existing task configuration without creating one", async () => {
+  const app = setup();
+  app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
+
+  await app.commands.get("explorerTasks.openExistingTaskConfiguration")();
+  assert.equal(app.openedDocuments.at(-1), "workspace/.vscode/tasks.json");
+  assert.equal(app.createdDirectories.length, 0);
+
+  app.setTaskConfigurationExists(false);
+  await app.commands.get("explorerTasks.openExistingTaskConfiguration")();
+  assert.equal(app.createdDirectories.length, 0);
+  assert.match(app.errors.at(-1), /Could not open the task configuration/);
+});
+
+test("the overflow menu opens the official VS Code task documentation", async () => {
+  const app = setup();
+  await app.commands.get("explorerTasks.openTaskDocumentation")();
+  assert.equal(
+    app.externalUris[0].value,
+    "https://code.visualstudio.com/docs/editor/tasks"
+  );
+});
+
 test("Add Task appends uniquely named shell tasks and preserves JSONC", async () => {
   const app = setup();
   app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
@@ -933,6 +960,12 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
     ["explorerTasks.stopTask"]
   );
   assert(!manifest.contributes.menus.commandPalette.some(entry => entry.command === "explorerTasks.refresh"));
+  assert(manifest.contributes.menus.commandPalette.some(entry =>
+    entry.command === "explorerTasks.openTaskConfiguration" && entry.when === "false"
+  ));
+  assert(!manifest.contributes.menus.commandPalette.some(entry =>
+    entry.command === "explorerTasks.openExistingTaskConfiguration"
+  ));
   const commands = new Map(manifest.contributes.commands.map(command => [command.command, command]));
   assert.equal(commands.get("explorerTasks.expandGroups").icon, "$(expand-all)");
   assert.equal(commands.get("explorerTasks.collapseGroups").icon, "$(collapse-all)");
@@ -943,6 +976,19 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
   assert(manifest.contributes.menus["view/title"].some(entry =>
     entry.command === "explorerTasks.addInput" &&
       entry.group === "configuration@1"
+  ));
+  assert(manifest.contributes.menus["view/title"].some(entry =>
+    entry.command === "explorerTasks.openExistingTaskConfiguration" &&
+      entry.when === "view == explorerTasks.tasksView" &&
+      entry.group === "configuration@2"
+  ));
+  assert.equal(
+    commands.get("explorerTasks.openExistingTaskConfiguration").enablement,
+    "explorerTasks.hasTaskConfiguration"
+  );
+  assert(manifest.contributes.menus["view/title"].some(entry =>
+    entry.command === "explorerTasks.openTaskDocumentation" &&
+      entry.group === "help@1"
   ));
   assert(manifest.contributes.menus["view/title"].some(entry =>
     entry.command === "explorerTasks.addTask" &&
