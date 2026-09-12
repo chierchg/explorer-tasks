@@ -1,9 +1,20 @@
 <div align="center">
-  <img src="./media/icon.png" width="100" alt="Explorer Tasks logo"/>
-  <h1>Explorer Tasks</h1>
+  <h1>
+    <img src="./media/icon.png" width="64" align="center" alt="Explorer Tasks logo" />
+    Explorer Tasks
+  </h1>
+
   <p>View and run tasks directly from the Explorer tab in VS Code.</p>
-  <p><a href="#features">Features</a> | <a href="#task-controls">Task controls</a> | <a href="#toolbar-actions">Toolbar actions</a> | <a href="#organize-tasks-into-groups">Task groups</a> | <a href="#task-icons">Task icons</a></p>
-  <img src="./media/explorer-tasks.png" width="550" align="center" alt="Project tasks directly in the VS Code Explorer"/>
+
+  <p>
+    <a href="#features">Features</a> |
+    <a href="#task-controls">Task controls</a> |
+    <a href="#toolbar-actions">Toolbar actions</a> |
+    <a href="#organize-tasks-into-groups">Task groups</a> |
+    <a href="#task-icons">Task icons</a>
+  </p>
+
+  <img src="./media/explorer-tasks.png" width="450" alt="Project tasks directly in the VS Code Explorer" />
 </div>
 
 ## Features
