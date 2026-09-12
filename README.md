@@ -14,7 +14,7 @@
     <a href="#task-icons">Task icons</a>
   </p>
 
-  <img src="./media/explorer-tasks.png" width="450" alt="Project tasks directly in the VS Code Explorer" />
+  <img src="./media/explorer-tasks.png" width="300" alt="Project tasks directly in the VS Code Explorer" />
 </div>
 
 ## Features
