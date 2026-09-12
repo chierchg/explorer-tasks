@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Add table of contents to README for easier navigation.
+
 ## 1.0.0
 
 - Require task labels to be unique within each workspace scope, reporting and displaying duplicated labels as disabled warning rows.
