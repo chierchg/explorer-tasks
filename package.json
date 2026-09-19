@@ -30,7 +30,7 @@
   },
   "homepage": "https://github.com/chierchg/explorer-tasks#readme",
   "scripts": {
-    "check": "node --check src/extension.js && node --check src/task-configuration.js && node --check src/task-model.js && node --check src/task-tree.js",
+    "check": "node --check src/extension.js && node --check src/task-configuration.js && node --check src/task-model.js && node --check src/task-tree.js && node --check scripts/push-release.js",
     "test": "node --test",
     "vscode:prepublish": "npm run check && npm test",
     "package": "node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\" && vsce package --out dist/explorer-tasks.vsix"

@@ -28,16 +28,11 @@
     },
     {
       "label": "Release / 3. Push release",
-      "detail": "Pushes the current branch and its annotated version tags to origin, establishing the upstream branch when needed.",
+      "detail": "Verifies the release tag points to HEAD, then atomically pushes the current branch and tag to origin.",
       "type": "process",
-      "command": "git",
+      "command": "node",
       "args": [
-        "push",
-        "--atomic",
-        "--set-upstream",
-        "origin",
-        "HEAD",
-        "--follow-tags"
+        "scripts/push-release.js"
       ],
       "icon": {"id": "cloud-upload"}
     }

@@ -64,14 +64,16 @@ VSIX…**, reload VS Code, and repeat the critical manual checks.
    and creates the corresponding `v<version>` Git tag.
 4. Run **Build package** task to create the VSIX file for publication.
 
-The version commit and tag are local until pushed, so they can be corrected before the release leaves the machine.
+The version commit and tag are local until pushed, so they can be corrected before the release leaves the machine. If the version commit is amended, move its tag to the amended commit with the command reported by **Push release** before trying again.
 
 ## Publish
 
 1. Upload `dist/explorer-tasks.vsix` through the
    [Marketplace publisher management page](https://marketplace.visualstudio.com/manage).
 2. Run **Push release** task to push the current branch and its annotated version
-   tag to `origin`. The task also establishes the upstream for a new branch.
+   tag to `origin`. The task verifies that the tag for the version in
+   `package.json` points to `HEAD`, then pushes the branch and that tag atomically.
+   It also establishes the upstream for a new branch.
 
 > [!NOTE]
 > A normal `git push` does not push tags. If that happens, push the annotated local version tag with
