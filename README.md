@@ -36,7 +36,7 @@ See the [VS Code Tasks guide](https://code.visualstudio.com/docs/editor/tasks) f
 - Click the Edit action to open its definition in `tasks.json`.
 - Click the Hide/Unhide action to hide or reveal a task in the view.
 
-***Important notes:***
+*Remarks:*
 
 1. Task labels must be **unique within each workspace scope.** A task with a duplicated label is disabled until it is renamed.
 2. If a running task is renamed or removed, its original label remains visible with a Stop action until the execution ends.

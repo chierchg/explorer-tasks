@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- Prevent the Create `tasks.json` action from appearing briefly while project tasks are still loading.
+
 ## 1.0.1
 
 - Add table of contents to README for easier navigation.

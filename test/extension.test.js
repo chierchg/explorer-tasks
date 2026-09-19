@@ -521,14 +521,14 @@ test("unchanged view contexts are not sent again", async () => {
   const app = setup();
 
   await app.provider.getChildren();
-  assert.equal(app.contextUpdates.length, 6);
+  assert.equal(app.contextUpdates.length, 7);
   await app.provider.getChildren();
-  assert.equal(app.contextUpdates.length, 6);
+  assert.equal(app.contextUpdates.length, 7);
 
   await app.provider.setShowHidden(true);
   await app.provider.getChildren();
-  assert.equal(app.contextUpdates.length, 7);
-  assert.deepEqual(app.contextUpdates[6], ["explorerTasks.showHiddenTasks", true]);
+  assert.equal(app.contextUpdates.length, 8);
+  assert.deepEqual(app.contextUpdates[7], ["explorerTasks.showHiddenTasks", true]);
 });
 
 test("Run delegates to VS Code and start events update the view", async () => {
@@ -748,6 +748,7 @@ test("the empty-state command opens or creates a task configuration", async () =
   app.vscode.workspace.workspaceFolders = [{ uri: "workspace" }];
 
   await app.provider.getChildren();
+  assert.equal(app.contexts.get("explorerTasks.taskConfigurationChecked"), true);
   assert.equal(app.contexts.get("explorerTasks.hasTaskConfiguration"), true);
   await app.commands.get("explorerTasks.openTaskConfiguration")();
   assert.equal(app.openedDocuments.at(-1), "workspace/.vscode/tasks.json");
@@ -1010,11 +1011,11 @@ test("Run stays in the context menu while Stop and Modify remain inline", () => 
   assert.equal(welcomeEntries.length, 2);
   assert(welcomeEntries.some(entry =>
     entry.contents.includes("[Open tasks.json]") &&
-      entry.when === "explorerTasks.hasTaskConfiguration"
+      entry.when === "explorerTasks.taskConfigurationChecked && explorerTasks.hasTaskConfiguration"
   ));
   assert(welcomeEntries.some(entry =>
     entry.contents.includes("[Create tasks.json]") &&
-      entry.when === "!explorerTasks.hasTaskConfiguration"
+      entry.when === "explorerTasks.taskConfigurationChecked && !explorerTasks.hasTaskConfiguration"
   ));
 });
 

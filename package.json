@@ -188,12 +188,12 @@
       {
         "view": "explorerTasks.tasksView",
         "contents": "No project tasks found.\n[Open tasks.json](command:explorerTasks.openTaskConfiguration)",
-        "when": "explorerTasks.hasTaskConfiguration"
+        "when": "explorerTasks.taskConfigurationChecked && explorerTasks.hasTaskConfiguration"
       },
       {
         "view": "explorerTasks.tasksView",
         "contents": "No project tasks found.\n[Create tasks.json](command:explorerTasks.openTaskConfiguration)",
-        "when": "!explorerTasks.hasTaskConfiguration"
+        "when": "explorerTasks.taskConfigurationChecked && !explorerTasks.hasTaskConfiguration"
       }
     ],
     "menus": {

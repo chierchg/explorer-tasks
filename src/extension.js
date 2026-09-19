@@ -146,6 +146,7 @@ class TasksProvider {
         "explorerTasks.hasTaskGroups": hasTaskGroups,
         "explorerTasks.treeViewMode": mode === "tree",
         "explorerTasks.groupsExpanded": groupsExpanded,
+        "explorerTasks.taskConfigurationChecked": true,
         "explorerTasks.hasTaskConfiguration": hasTaskConfiguration
       });
 
