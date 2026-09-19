@@ -2,7 +2,7 @@
   "name": "explorer-tasks",
   "displayName": "Explorer Tasks",
   "description": "Run VS Code tasks directly from the Explorer.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "yokopoco",
   "icon": "media/icon.png",
   "pricing": "Free",
@@ -350,6 +350,6 @@
     "jsonc-parser": "3.3.1"
   },
   "devDependencies": {
-    "@vscode/vsce": "3.9.2"
+    "@vscode/vsce": "4.0.0"
   }
 }
